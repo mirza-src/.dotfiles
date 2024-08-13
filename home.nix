@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   # Home Manager needs a bit of information about you and the paths it should manage.
@@ -15,6 +15,7 @@
   # release notes.
   home.stateVersion = "24.05"; # Please read the comment before changing.
 
+  fonts.fontconfig.enable = true;
   # The home.packages option allows you to install Nix packages into your
   # environment.
   home.packages = with pkgs; [
@@ -36,6 +37,7 @@
     # '')
 
     git
+    (nerdfonts.override { fonts = [ "FiraCode" "Meslo" ]; })
   ];
 
   # Home Manager is pretty good at managing dotfiles. The primary way to manage
@@ -76,6 +78,13 @@
   # Let Home Manager install and manage itself.
   programs.home-manager.enable = true;
 
+
+  programs.go = {
+    enable = true;
+
+    goPath = ".go";
+  };
+
   programs.git = {
     enable = true;
     userName = "mirza-src";
@@ -89,13 +98,94 @@
     };
   };
 
+  programs.fzf = {
+    enable = true;
+  };
+
+  programs.zoxide = {
+    enable = true;
+
+    options = [
+      "--cmd cd"
+    ];
+  };
+
+  programs.eza = {
+    enable = true;
+
+    icons = true;
+    git = true;
+  };
+
   programs.zsh = {
     enable = true;
 
+    autocd = true;
+
+    enableCompletion = true;
+
+    history = {
+      extended = true;
+    };
+
+    autosuggestion = {
+      enable = true;
+      strategy = [ "match_prev_cmd" ];
+    };
+
+    syntaxHighlighting = {
+      enable = true;
+    };
+
+    historySubstringSearch = {
+      enable = true;
+    };
+
+    plugins = [
+      {
+        name = "powerlevel10k";
+        src = pkgs.zsh-powerlevel10k;
+        file = "share/zsh-powerlevel10k/powerlevel10k.zsh-theme";
+      }
+      {
+        name = "powerlevel10k-config";
+        src = lib.cleanSource ./zsh;
+        file = ".p10k.zsh";
+      }
+      {
+        name = "fzf-tab";
+        src = pkgs.zsh-fzf-tab;
+        file = "share/fzf-tab/fzf-tab.plugin.zsh";
+      }
+    ];
+
+    shellAliases = {
+      ls = "eza --color=always";
+      ll = "ls -lh";
+      la = "ls -a";
+      lla = "ls -lha";
+    };
+
     initExtra = ''
+      # Homebrew setup
       if [[ $(uname -m) == 'arm64' ]]; then
         eval "$(/opt/homebrew/bin/brew shellenv)"
       fi
+
+      zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+      # disable sort when completing `git checkout`
+      zstyle ':completion:*:git-checkout:*' sort false
+      # set descriptions format to enable group support
+      # NOTE: don't use escape sequences here, fzf-tab will ignore them
+      zstyle ':completion:*:descriptions' format '[%d]'
+      # set list-colors to enable filename colorizing
+      zstyle ':completion:*' list-colors ''${(s.:.)LS_COLORS}
+      # force zsh not to show completion menu, which allows fzf-tab to capture the unambiguous prefix
+      zstyle ':completion:*' menu no
+      # preview directory's content with eza when completing path
+      zstyle ':fzf-tab:complete:*' fzf-preview 'eza --color=always --icons --git -1 $realpath'
+      # switch group using `<` and `>`
+      zstyle ':fzf-tab:*' switch-group '<' '>'
     '';
   };
 
@@ -131,12 +221,12 @@
         serverPath = "nixd";
         serverSettings = {
           nil = {
-            formatting = { command = ["nixpkgs-fmt"]; };
+            formatting = { command = [ "nixpkgs-fmt" ]; };
             nix = { flake = { autoEvalInputs = true; }; };
           };
           nixd = {
             formatting = {
-              command = ["nixpkgs-fmt"];
+              command = [ "nixpkgs-fmt" ];
             };
           };
         };
