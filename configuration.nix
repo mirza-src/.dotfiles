@@ -75,6 +75,17 @@
     };
   };
 
+  system.defaults.dock.autohide = true;
+  system.defaults.dock.show-recents = false;
+  system.defaults.dock.persistent-others = [];
+  system.defaults.dock.persistent-apps = [
+    "/Applications/Google Chrome.app"
+    "/Applications/Visual Studio Code.app"
+    "/Applications/iTerm.app"
+    "/Applications/Lens.app"
+    "/Applications/Microsoft Teams.app"
+  ];
+
   # Create /etc/zshrc that loads the nix-darwin environment.
   programs.zsh.enable = true; # default shell on catalina
 
