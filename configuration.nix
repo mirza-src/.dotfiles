@@ -21,9 +21,7 @@
     onActivation.cleanup = "uninstall";
 
     taps = [
-      "homebrew/core"
-      "homebrew/cask"
-      "homebrew/bundle"
+      "mirza-src/tap"
     ];
     brews = [
       "mas"
@@ -39,6 +37,8 @@
       "microsoft-teams"
       "microsoft-remote-desktop"
       "webex"
+      "whatsapp"
+      "ryujinx"
     ];
     masApps = {
       "Amphetamine" = 937984704;
