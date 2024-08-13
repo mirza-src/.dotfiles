@@ -39,6 +39,7 @@
       # $ darwin-rebuild build --flake .#simple
       darwinConfigurations.${default-hostname} = nix-darwin.lib.darwinSystem {
         specialArgs = {
+          inherit inputs;
           inherit username;
         };
         modules = [

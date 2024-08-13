@@ -1,4 +1,4 @@
-{ pkgs, username, ... }:
+{ inputs, pkgs, username, ... }:
 {
   # HACK: https://github.com/nix-community/home-manager/issues/4026#issuecomment-1565974702
   users.users.${username} = {
@@ -8,16 +8,42 @@
   # $ nix-env -qaP | grep wget
   environment.systemPackages = with pkgs; [
     vim
+    nil
     nixd
     nixpkgs-fmt
+
+    colima
+    docker
   ];
 
   # Auto upgrade nix package and the daemon service.
   services.nix-daemon.enable = true;
-  # nix.package = pkgs.nix;
 
-  # Necessary for using flakes on this system.
-  nix.settings.experimental-features = "nix-command flakes";
+  # Necessary settings for nix-darwin.
+  nix = {
+    # package = pkgs.nixVersions.latest;
+    nixPath = [
+      "nixpkgs=${inputs.nixpkgs}"
+    ];
+    settings = {
+      trusted-users = [
+        "@admin"
+        username
+      ];
+      extra-trusted-users = [
+        "@admin"
+        username
+      ];
+      experimental-features = [ "nix-command" "flakes" ];
+      system = "aarch64-darwin";
+      # extra-platforms = [ "aarch64-darwin" "x86_64-darwin" ];
+    };
+    # Enable linux-builder for remote linux builds.
+    linux-builder = {
+      enable = true;
+      ephemeral = true;
+    };
+  };
 
   # Create /etc/zshrc that loads the nix-darwin environment.
   programs.zsh.enable = true; # default shell on catalina
