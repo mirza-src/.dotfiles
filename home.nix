@@ -102,9 +102,45 @@
   programs.vscode = {
     enable = true;
 
+    mutableExtensionsDir = true;
     extensions = with pkgs.vscode-extensions; [
       github.copilot
+      github.vscode-github-actions
       eamodio.gitlens
+      ms-azuretools.vscode-docker
+      visualstudioexptteam.vscodeintellicode
+      gruntfuggly.todo-tree
+      usernamehw.errorlens
+      esbenp.prettier-vscode
+      jnoortheen.nix-ide
+      redhat.vscode-yaml
+      redhat.vscode-xml
+      ms-python.python
+      golang.go
+      dbaeumer.vscode-eslint
+      bradlc.vscode-tailwindcss
     ];
+
+    userSettings = {
+      git = {
+        autofetch = true;
+        confirmSync = false;
+      };
+      nix = {
+        enableLanguageServer = true;
+        serverPath = "nixd";
+        serverSettings = {
+          nil = {
+            formatting = { command = ["nixpkgs-fmt"]; };
+            nix = { flake = { autoEvalInputs = true; }; };
+          };
+          nixd = {
+            formatting = {
+              command = ["nixpkgs-fmt"];
+            };
+          };
+        };
+      };
+    };
   };
 }
