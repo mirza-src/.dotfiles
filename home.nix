@@ -89,5 +89,19 @@
     };
   };
 
-  nixpkgs.config.allowUnfree = true;
+  programs.zsh = {
+    enable = true;
+
+    initExtra = ''
+      if [[ $(uname -m) == 'arm64' ]]; then
+        eval "$(/opt/homebrew/bin/brew shellenv)"
+      fi
+    '';
+  };
+
+  programs.vscode = {
+    extensions = with pkgs.vscode-extensions; [
+      github.copilot
+    ];
+  };
 }

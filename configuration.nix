@@ -16,6 +16,35 @@
     docker
   ];
 
+  homebrew = {
+    enable = true;
+    onActivation.cleanup = "uninstall";
+
+    taps = [
+      "homebrew/core"
+      "homebrew/cask"
+      "homebrew/bundle"
+    ];
+    brews = [
+      "mas"
+    ];
+    casks = [
+      "iterm2"
+      "google-chrome"
+      "amazon-q"
+      "visual-studio-code"
+      "spotify"
+      "lens"
+      "pgadmin4"
+      "microsoft-teams"
+      "microsoft-remote-desktop"
+      "webex"
+    ];
+    masApps = {
+      "Amphetamine" = 937984704;
+    };
+  };
+
   # Auto upgrade nix package and the daemon service.
   services.nix-daemon.enable = true;
 
@@ -47,7 +76,6 @@
 
   # Create /etc/zshrc that loads the nix-darwin environment.
   programs.zsh.enable = true; # default shell on catalina
-  # programs.fish.enable = true;
 
   # Set Git commit hash for darwin-version.
   system.configurationRevision = null;
@@ -58,4 +86,5 @@
 
   # The platform the configuration will be used on.
   nixpkgs.hostPlatform = "aarch64-darwin";
+  nixpkgs.config.allowUnfree = true;
 }
