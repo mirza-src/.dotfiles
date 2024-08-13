@@ -19,6 +19,7 @@
   homebrew = {
     enable = true;
     onActivation.cleanup = "uninstall";
+    onActivation.upgrade = true;
 
     taps = [
       "mirza-src/tap"
