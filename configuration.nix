@@ -28,7 +28,7 @@
       "mas"
     ];
     casks = [
-      "kitty"
+      "iterm2"
       "google-chrome"
       "amazon-q"
       "visual-studio-code"
@@ -82,7 +82,7 @@
   system.defaults.dock.persistent-apps = [
     "/Applications/Google Chrome.app"
     "/Applications/Visual Studio Code.app"
-    "/Applications/kitty.app"
+    "/Applications/iTerm.app"
     "/Applications/Lens.app"
     "/Applications/Microsoft Teams.app"
   ];
