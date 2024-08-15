@@ -209,4 +209,27 @@
 
     userSettings = builtins.fromJSON (builtins.readFile ./.vscode/settings.json);
   };
+
+  launchd.agents = {
+    colima = {
+      enable = true;
+
+      config = {
+        EnvironmentVariables = {
+          PATH = "/run/current-system/sw/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+        };
+        ProgramArguments = [
+          "${pkgs.colima}/bin/colima"
+          "start"
+          "-f"
+        ];
+        RunAtLoad = true;
+        KeepAlive = {
+          SuccessfulExit = true;
+        };
+        StandardErrorPath = "/Users/${config.home.username}/Library/Logs/nix-colima.log";
+        StandardOutPath = "/Users/${config.home.username}/Library/Logs/nix-colima.log";
+      };
+    };
+  };
 }
