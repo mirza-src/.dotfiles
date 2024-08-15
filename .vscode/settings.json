@@ -23,5 +23,9 @@
         "command": ["nixpkgs-fmt"]
       }
     }
+  },
+  "redhat.telemetry.enabled": false,
+  "[nix]": {
+    "editor.defaultFormatter": "jnoortheen.nix-ide"
   }
 }
