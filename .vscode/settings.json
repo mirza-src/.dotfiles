@@ -1,0 +1,27 @@
+{
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.replaceTagsWhenPull": true,
+  "editor.fontFamily": "Fira Code",
+  "editor.fontLigatures": true,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "always"
+  },
+  "terminal.integrated.scrollback": 100000,
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "nix.enableLanguageServer": true,
+  "nix.serverPath": "nixd",
+  "nix.serverSettings": {
+    "nil": {
+      "formatting": { "command": ["nixpkgs-fmt"] },
+      "nix": { "flake": { "autoEvalInputs": true } }
+    },
+    "nixd": {
+      "formatting": {
+        "command": ["nixpkgs-fmt"]
+      }
+    }
+  }
+}

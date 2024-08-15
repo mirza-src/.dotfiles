@@ -207,26 +207,6 @@
       bradlc.vscode-tailwindcss
     ];
 
-    userSettings = {
-      git = {
-        autofetch = true;
-        confirmSync = false;
-      };
-      nix = {
-        enableLanguageServer = true;
-        serverPath = "nixd";
-        serverSettings = {
-          nil = {
-            formatting = { command = [ "nixpkgs-fmt" ]; };
-            nix = { flake = { autoEvalInputs = true; }; };
-          };
-          nixd = {
-            formatting = {
-              command = [ "nixpkgs-fmt" ];
-            };
-          };
-        };
-      };
-    };
+    userSettings = builtins.fromJSON (builtins.readFile ./.vscode/settings.json);
   };
 }
