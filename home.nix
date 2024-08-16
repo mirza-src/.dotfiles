@@ -233,4 +233,9 @@
       };
     };
   };
+
+  home.file."${config.home.homeDirectory}/.colima" = {
+    source = ./.colima;
+    recursive = true;
+  };
 }
