@@ -15,6 +15,7 @@
     colima
     docker
     kubectl
+    kubernetes-helm
 
     kubelogin
     azure-cli

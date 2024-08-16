@@ -205,6 +205,7 @@
       golang.go
       dbaeumer.vscode-eslint
       bradlc.vscode-tailwindcss
+      ms-kubernetes-tools.vscode-kubernetes-tools
     ];
 
     userSettings = builtins.fromJSON (builtins.readFile ./.vscode/settings.json);
