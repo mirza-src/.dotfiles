@@ -14,6 +14,10 @@
 
     colima
     docker
+    kubectl
+
+    kubelogin
+    azure-cli
   ];
 
   homebrew = {
@@ -29,6 +33,7 @@
     ];
     casks = [
       "iterm2"
+      "openinterminal"
       "google-chrome"
       "amazon-q"
       "visual-studio-code"
