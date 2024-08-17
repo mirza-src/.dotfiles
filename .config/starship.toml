@@ -5,3 +5,6 @@ format = '$all'
 
 [kubernetes]
 disabled = false
+
+[azure]
+disabled = false
