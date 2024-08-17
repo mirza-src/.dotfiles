@@ -206,6 +206,7 @@
       dbaeumer.vscode-eslint
       bradlc.vscode-tailwindcss
       ms-kubernetes-tools.vscode-kubernetes-tools
+      tamasfe.even-better-toml
     ];
 
     userSettings = builtins.fromJSON (builtins.readFile ./.vscode/settings.json);
@@ -234,8 +235,13 @@
     };
   };
 
-  home.file."${config.home.homeDirectory}/.colima" = {
+  home.file.".colima" = {
     source = ./.colima;
+    recursive = true;
+  };
+
+  home.file.".config" = {
+    source = ./.config;
     recursive = true;
   };
 }

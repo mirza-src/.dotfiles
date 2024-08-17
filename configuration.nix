@@ -16,6 +16,7 @@
     docker
     kubectl
     kubernetes-helm
+    kubectx
 
     kubelogin
     azure-cli
