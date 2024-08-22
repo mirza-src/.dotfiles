@@ -8,6 +8,9 @@
   # $ nix-env -qaP | grep wget
   environment.systemPackages = with pkgs; [
     vim
+    git
+    delta
+    bat
     nil
     nixd
     nixpkgs-fmt
@@ -18,21 +21,33 @@
     kubernetes-helm
     kubectx
 
+    qbittorrent
+
     kubelogin
     azure-cli
   ];
 
   homebrew = {
     enable = true;
-    onActivation.cleanup = "uninstall";
-    onActivation.upgrade = true;
+
+    global = {
+      autoUpdate = true;
+      brewfile = true;
+      lockfiles = true;
+    };
+
+    onActivation = {
+      upgrade = true;
+      autoUpdate = true;
+      cleanup = "uninstall";
+    };
 
     taps = [
       "mirza-src/tap"
     ];
-    brews = [
-      "mas"
-    ];
+
+    brews = [ ];
+
     casks = [
       "iterm2"
       "openinterminal"
@@ -44,9 +59,11 @@
       "pgadmin4"
       "microsoft-teams"
       "microsoft-remote-desktop"
+      "microsoft-azure-storage-explorer"
       "webex"
       "whatsapp"
       "ryujinx"
+      "vlc"
     ];
     masApps = {
       "Amphetamine" = 937984704;
@@ -59,7 +76,7 @@
 
   # Necessary settings for nix-darwin.
   nix = {
-    # package = pkgs.nixVersions.latest;
+    package = pkgs.nixVersions.latest;
     nixPath = [
       "nixpkgs=${inputs.nixpkgs}"
     ];
@@ -83,16 +100,63 @@
     };
   };
 
-  system.defaults.dock.autohide = true;
-  system.defaults.dock.show-recents = false;
-  system.defaults.dock.persistent-others = [ ];
-  system.defaults.dock.persistent-apps = [
-    "/Applications/Google Chrome.app"
-    "/Applications/Visual Studio Code.app"
-    "/Applications/iTerm.app"
-    "/Applications/Lens.app"
-    "/Applications/Microsoft Teams.app"
-  ];
+  system.defaults = {
+    NSGlobalDomain = {
+      AppleKeyboardUIMode = 3;
+      "com.apple.keyboard.fnState" = true;
+    };
+
+    CustomUserPreferences = {
+      "com.apple.finder" = {
+        ShowExternalHardDrivesOnDesktop = true;
+        ShowHardDrivesOnDesktop = true;
+        ShowMountedServersOnDesktop = true;
+        ShowRemovableMediaOnDesktop = true;
+        _FXSortFoldersFirst = true;
+
+        AppleShowAllExtensions = true;
+        FXPreferredViewStyle = "Nlsv";
+        QuitMenuItem = true;
+        ShowPathbar = true;
+        FXEnableExtensionChangeWarning = false;
+        # When performing a search, search the current folder by default
+        FXDefaultSearchScope = "SCcf";
+      };
+      "com.apple.desktopservices" = {
+        # Avoid creating .DS_Store files on network or USB volumes
+        DSDontWriteNetworkStores = true;
+        DSDontWriteUSBStores = true;
+      };
+      "com.apple.SoftwareUpdate" = {
+        AutomaticCheckEnabled = true;
+        # Check for software updates daily, not just once per week
+        ScheduleFrequency = true;
+        # Download newly available updates in background
+        AutomaticDownload = true;
+        # Install System data files & security updates
+        CriticalUpdateInstall = true;
+      };
+    };
+
+    dock = {
+      autohide = true;
+      show-recents = false;
+      persistent-others = [ ];
+      persistent-apps = [
+        "/Applications/Google Chrome.app"
+        "/Applications/Visual Studio Code.app"
+        "/Applications/iTerm.app"
+        "/Applications/Lens.app"
+        "/Applications/Microsoft Teams.app"
+      ];
+    };
+
+    trackpad = {
+      Clicking = true;
+      Dragging = true;
+      TrackpadThreeFingerDrag = true;
+    };
+  };
 
   # Create /etc/zshrc that loads the nix-darwin environment.
   programs.zsh.enable = true; # default shell on catalina

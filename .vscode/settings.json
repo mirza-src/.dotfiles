@@ -27,5 +27,8 @@
   "redhat.telemetry.enabled": false,
   "[nix]": {
     "editor.defaultFormatter": "jnoortheen.nix-ide"
+  },
+  "vs-kubernetes": {
+    "vs-kubernetes.crd-code-completion": "enabled"
   }
 }

@@ -85,6 +85,10 @@
     goPath = ".go";
   };
 
+  programs.direnv = {
+    enable = true;
+  };
+
   programs.git = {
     enable = true;
     userName = "mirza-src";
@@ -95,6 +99,12 @@
     extraConfig = {
       github.user = "mirza-src";
       init = { defaultBranch = "main"; };
+    };
+    delta = {
+      enable = true;
+      options = {
+        features = "line-numbers side-by-side decorations hyperlinks";
+      };
     };
   };
 
@@ -115,6 +125,12 @@
 
     icons = true;
     git = true;
+  };
+
+  programs.bat = {
+    enable = true;
+
+    extraPackages = with pkgs.bat-extras; [ batgrep batman batpipe batwatch prettybat ];
   };
 
   programs.starship = {
@@ -160,6 +176,8 @@
       ll = "ls -lh";
       la = "ls -a";
       lla = "ls -lha";
+
+      cat = "bat";
     };
 
     initExtra = ''
