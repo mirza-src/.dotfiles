@@ -19,7 +19,7 @@
     };
   };
 
-  outputs = inputs@{ self, nix-darwin, nixpkgs, nix-homebrew, home-manager, ... }:
+  outputs = inputs@{ self, nix-darwin, nix-homebrew, home-manager, ... }:
     let
       default-hostname = "IN01-NTB-286";
       username = "mirza";
@@ -48,7 +48,7 @@
               user = "${username}";
 
               # Optional: Declarative tap management
-              taps = {};
+              taps = { };
 
               # Optional: Enable fully-declarative tap management
               #

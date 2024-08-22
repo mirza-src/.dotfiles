@@ -71,9 +71,9 @@
   };
 
   security.pam.enableSudoTouchIdAuth = true;
+
   # Auto upgrade nix package and the daemon service.
   services.nix-daemon.enable = true;
-
   # Necessary settings for nix-darwin.
   nix = {
     package = pkgs.nixVersions.latest;
