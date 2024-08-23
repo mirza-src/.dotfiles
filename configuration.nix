@@ -65,9 +65,12 @@
       "ryujinx"
       "vlc"
     ];
+
     masApps = {
       "Amphetamine" = 937984704;
     };
+
+    whalebrews = [ ];
   };
 
   security.pam.enableSudoTouchIdAuth = true;
