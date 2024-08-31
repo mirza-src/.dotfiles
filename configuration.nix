@@ -16,7 +16,8 @@
     nixpkgs-fmt
 
     colima
-    docker
+    docker_26
+    dive
     kubectl
     kubernetes-helm
     kubectx
@@ -25,6 +26,7 @@
 
     kubelogin
     azure-cli
+    azure-storage-azcopy
   ];
 
   homebrew = {
@@ -64,6 +66,7 @@
       "whatsapp"
       "ryujinx"
       "vlc"
+      "iina"
     ];
 
     masApps = {
@@ -94,7 +97,7 @@
       ];
       experimental-features = [ "nix-command" "flakes" ];
       system = "aarch64-darwin";
-      # extra-platforms = [ "aarch64-darwin" "x86_64-darwin" ];
+      extra-platforms = [ "aarch64-darwin" "x86_64-darwin" ];
     };
     # Enable linux-builder for remote linux builds.
     linux-builder = {
@@ -106,7 +109,7 @@
   system.defaults = {
     NSGlobalDomain = {
       AppleKeyboardUIMode = 3;
-      "com.apple.keyboard.fnState" = true;
+      "com.apple.keyboard.fnState" = false;
     };
 
     CustomUserPreferences = {
