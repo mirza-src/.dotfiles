@@ -3,6 +3,8 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    flake-utils.url = "github:numtide/flake-utils";
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -33,92 +35,69 @@
     };
   };
 
-  outputs = { self, nixpkgs, home-manager, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask } @inputs:
+  outputs = { self, nixpkgs, flake-utils, flake-parts, home-manager, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask } @inputs:
     let
       user = "%USER%";
-      linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
-      darwinSystems = [ "aarch64-darwin" "x86_64-darwin" ];
-      forAllSystems = f: nixpkgs.lib.genAttrs (linuxSystems ++ darwinSystems) f;
-      devShell = system: let pkgs = nixpkgs.legacyPackages.${system}; in {
-        default = with pkgs; mkShell {
-          nativeBuildInputs = with pkgs; [ bashInteractive git ];
-          shellHook = with pkgs; ''
-            export EDITOR=vim
-          '';
+    in
+    flake-parts.lib.mkFlake {inherit inputs;}
+    {
+      imports = [
+        flake-parts.flakeModules.easyOverlay
+      ];
+      systems = flake-utils.lib.defaultSystems;
+
+      perSystem = { config, system, pkgs, ... }: {
+        devShells = {
+          default = with pkgs; mkShell {
+            nativeBuildInputs = [ bashInteractive git ];
+            shellHook = ''
+              export EDITOR=vim
+            '';
+          };
         };
       };
-      mkApp = scriptName: system: {
-        type = "app";
-        program = "${(nixpkgs.legacyPackages.${system}.writeScriptBin scriptName ''
-          #!/usr/bin/env bash
-          PATH=${nixpkgs.legacyPackages.${system}.git}/bin:$PATH
-          echo "Running ${scriptName} for ${system}"
-          exec ${self}/apps/${system}/${scriptName}
-        '')}/bin/${scriptName}";
-      };
-      mkLinuxApps = system: {
-        "apply" = mkApp "apply" system;
-        "build-switch" = mkApp "build-switch" system;
-        "copy-keys" = mkApp "copy-keys" system;
-        "create-keys" = mkApp "create-keys" system;
-        "check-keys" = mkApp "check-keys" system;
-        "install" = mkApp "install" system;
-      };
-      mkDarwinApps = system: {
-        "apply" = mkApp "apply" system;
-        "build" = mkApp "build" system;
-        "build-switch" = mkApp "build-switch" system;
-        "copy-keys" = mkApp "copy-keys" system;
-        "create-keys" = mkApp "create-keys" system;
-        "check-keys" = mkApp "check-keys" system;
-        "rollback" = mkApp "rollback" system;
-      };
-    in
-    {
-      devShells = forAllSystems devShell;
-      apps = nixpkgs.lib.genAttrs linuxSystems mkLinuxApps // nixpkgs.lib.genAttrs darwinSystems mkDarwinApps;
 
-      darwinConfigurations = nixpkgs.lib.genAttrs darwinSystems (system: let
-        user = "%USER%";
-      in
-        darwin.lib.darwinSystem {
-          inherit system;
-          specialArgs = inputs;
-          modules = [
-            home-manager.darwinModules.home-manager
-            nix-homebrew.darwinModules.nix-homebrew
-            {
-              nix-homebrew = {
-                inherit user;
-                enable = true;
-                taps = {
-                  "homebrew/homebrew-core" = homebrew-core;
-                  "homebrew/homebrew-cask" = homebrew-cask;
-                  "homebrew/homebrew-bundle" = homebrew-bundle;
+      flake = {
+        nixosConfigurations = {
+          hostname = nixpkgs.lib.nixosSystem {
+            specialArgs = {inherit inputs outputs;};
+            modules = [
+              disko.nixosModules.disko
+              home-manager.nixosModules.home-manager {
+                home-manager = {
+                  useGlobalPkgs = true;
+                  useUserPackages = true;
+                  users.${user} = import ./modules/nixos/home-manager.nix;
                 };
-                mutableTaps = false;
-                autoMigrate = true;
-              };
-            }
-            ./hosts/darwin
-          ];
-        }
-      );
+              }
+              ./hosts/nixos
+            ];
+          };
+        };
 
-      nixosConfigurations = nixpkgs.lib.genAttrs linuxSystems (system: nixpkgs.lib.nixosSystem {
-        inherit system;
-        specialArgs = inputs;
-        modules = [
-          disko.nixosModules.disko
-          home-manager.nixosModules.home-manager {
-            home-manager = {
-              useGlobalPkgs = true;
-              useUserPackages = true;
-              users.${user} = import ./modules/nixos/home-manager.nix;
-            };
-          }
-          ./hosts/nixos
-        ];
-     });
+        darwinConfigurations = {
+          hostname = darwin.lib.darwinSystem {
+            specialArgs = {inherit inputs outputs;};
+            modules = [
+              home-manager.darwinModules.home-manager
+              nix-homebrew.darwinModules.nix-homebrew
+              {
+                nix-homebrew = {
+                  inherit user;
+                  enable = true;
+                  taps = {
+                    "homebrew/homebrew-core" = homebrew-core;
+                    "homebrew/homebrew-cask" = homebrew-cask;
+                    "homebrew/homebrew-bundle" = homebrew-bundle;
+                  };
+                  mutableTaps = false;
+                  autoMigrate = true;
+                };
+              }
+              ./hosts/darwin
+            ];
+          };
+        };
+      };
   };
 }
