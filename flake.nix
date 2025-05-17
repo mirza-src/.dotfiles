@@ -2,11 +2,15 @@
   description = "Configuration for MacOS and NixOS";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:numtide/flake-utils";
     home-manager = {
       url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    lanzaboote = {
+      url = "github:nix-community/lanzaboote/v0.4.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     disko = {
@@ -35,7 +39,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, flake-parts, home-manager, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask } @inputs: let user = "%USER%"; in flake-parts.lib.mkFlake {inherit inputs;} {
+  outputs = { self, nixpkgs, flake-utils, flake-parts, home-manager, lanzaboote, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, ... } @inputs: let user = "%USER%"; in flake-parts.lib.mkFlake {inherit inputs;} {
     imports = [
       flake-parts.flakeModules.easyOverlay
     ];
@@ -68,10 +72,11 @@
       # NixOS configuration entrypoint
       # Available through 'nixos-rebuild --flake .#hostname'
       nixosConfigurations = {
-        hostname = nixpkgs.lib.nixosSystem {
+        nixos = nixpkgs.lib.nixosSystem {
           specialArgs = {inherit inputs;};
           modules = [
             disko.nixosModules.disko
+            lanzaboote.nixosModules.lanzaboote
             home-manager.nixosModules.home-manager
             /etc/nixos/hardware-configuration.nix
             ./hosts/nixos
