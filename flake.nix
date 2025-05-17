@@ -46,6 +46,11 @@
     systems = flake-utils.lib.defaultSystems;
 
     perSystem = { config, system, pkgs, ... }: {
+      packages = import ./pkgs pkgs;
+
+      # Adding an overlay to allow access to packages through nixpkgs
+      overlayAttrs = config.packages;
+
       devShells = {
         default = with pkgs; mkShell {
           nativeBuildInputs = [ bashInteractive git ];
@@ -80,6 +85,8 @@
             home-manager.nixosModules.home-manager
             /etc/nixos/hardware-configuration.nix
             ./hosts/nixos
+            # Apply overlays to the system's pkgs.
+            { nixpkgs.overlays = nixpkgs.lib.attrsets.attrValues self.overlays; }
           ];
         };
       };
