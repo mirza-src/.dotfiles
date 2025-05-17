@@ -35,69 +35,75 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, flake-parts, home-manager, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask } @inputs:
-    let
-      user = "%USER%";
-    in
-    flake-parts.lib.mkFlake {inherit inputs;}
-    {
-      imports = [
-        flake-parts.flakeModules.easyOverlay
-      ];
-      systems = flake-utils.lib.defaultSystems;
+  outputs = { self, nixpkgs, flake-utils, flake-parts, home-manager, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask } @inputs: let user = "%USER%"; in flake-parts.lib.mkFlake {inherit inputs;} {
+    imports = [
+      flake-parts.flakeModules.easyOverlay
+    ];
+    systems = flake-utils.lib.defaultSystems;
 
-      perSystem = { config, system, pkgs, ... }: {
-        devShells = {
-          default = with pkgs; mkShell {
-            nativeBuildInputs = [ bashInteractive git ];
-            shellHook = ''
-              export EDITOR=vim
-            '';
-          };
+    perSystem = { config, system, pkgs, ... }: {
+      devShells = {
+        default = with pkgs; mkShell {
+          nativeBuildInputs = [ bashInteractive git ];
+          shellHook = ''
+            export EDITOR=vim
+          '';
         };
       };
 
-      flake = {
-        nixosConfigurations = {
-          hostname = nixpkgs.lib.nixosSystem {
-            specialArgs = {inherit inputs outputs;};
-            modules = [
-              disko.nixosModules.disko
-              home-manager.nixosModules.home-manager {
-                home-manager = {
-                  useGlobalPkgs = true;
-                  useUserPackages = true;
-                  users.${user} = import ./modules/nixos/home-manager.nix;
-                };
-              }
-              ./hosts/nixos
-            ];
-          };
-        };
-
-        darwinConfigurations = {
-          hostname = darwin.lib.darwinSystem {
-            specialArgs = {inherit inputs outputs;};
-            modules = [
-              home-manager.darwinModules.home-manager
-              nix-homebrew.darwinModules.nix-homebrew
-              {
-                nix-homebrew = {
-                  inherit user;
-                  enable = true;
-                  taps = {
-                    "homebrew/homebrew-core" = homebrew-core;
-                    "homebrew/homebrew-cask" = homebrew-cask;
-                    "homebrew/homebrew-bundle" = homebrew-bundle;
-                  };
-                  mutableTaps = false;
-                  autoMigrate = true;
-                };
-              }
-              ./hosts/darwin
-            ];
-          };
+      # Standalone home-manager configuration entrypoint
+      # Available through 'home-manager --flake .#username'
+      legacyPackages.homeConfigurations = { # only legacyPackages work with home-manager + flake-parts
+        mirza = home-manager.lib.homeManagerConfiguration {
+          inherit pkgs; # Home-manager requires 'pkgs' instance
+          extraSpecialArgs = {inherit inputs;};
+          modules = [
+            ./modules/nixos/home-manager.nix
+          ];
         };
       };
+    };
+
+    flake = {
+      # NixOS configuration entrypoint
+      # Available through 'nixos-rebuild --flake .#hostname'
+      nixosConfigurations = {
+        hostname = nixpkgs.lib.nixosSystem {
+          specialArgs = {inherit inputs;};
+          modules = [
+            disko.nixosModules.disko
+            home-manager.nixosModules.home-manager
+            /etc/nixos/hardware-configuration.nix
+            ./hosts/nixos
+          ];
+        };
+      };
+
+      # nix-darwin configuration entrypoint
+      # Available through 'darwin-rebuild build --flake .#hostname'
+      darwinConfigurations = {
+        hostname = darwin.lib.darwinSystem {
+          specialArgs = {inherit inputs;};
+          modules = [
+            home-manager.darwinModules.home-manager
+            nix-homebrew.darwinModules.nix-homebrew
+            {
+              nix-homebrew = {
+                inherit user;
+                enable = true;
+                taps = {
+                  "homebrew/homebrew-core" = homebrew-core;
+                  "homebrew/homebrew-cask" = homebrew-cask;
+                  "homebrew/homebrew-bundle" = homebrew-bundle;
+                };
+                mutableTaps = false;
+                autoMigrate = true;
+              };
+            }
+            ./hosts/darwin
+          ];
+        };
+      };
+    };
   };
 }
