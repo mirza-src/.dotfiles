@@ -21,6 +21,27 @@
   };
   programs.gamemode.enable = true;
 
+  programs.zsh.enable = true;
+  users.defaultUserShell = pkgs.zsh;
+  programs.tmux = {
+    enable = true;
+    baseIndex = 1;
+    clock24 = true;
+    keyMode = "vi";
+    escapeTime = 600;
+    customPaneNavigationAndResize = true;
+    plugins = with pkgs.tmuxPlugins; [
+      sensible
+      vim-tmux-navigator
+      catppuccin
+      yank
+      better-mouse-mode
+    ];
+    extraConfig = ''
+      set-option -g default-shell ${pkgs.zsh}/bin/zsh
+    '';
+  };
+
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = (
@@ -41,6 +62,7 @@
         nvtopPackages.amd
         # nvtopPackages.nvidia
         gpustat
+        catppuccin
         gobject-introspection
         vulnix
         statix
