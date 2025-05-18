@@ -2,6 +2,7 @@
   imports = [
     # ../../modules/nixos/disk-config.nix
     # ../../modules/shared
+    ../../modules/nixos/nvidia.nix
     # Include the results of the hardware scan.
     /etc/nixos/hardware-configuration.nix
 
