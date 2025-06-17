@@ -5,6 +5,23 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:numtide/flake-utils";
+    hyprland.url = "github:hyprwm/Hyprland";
+    hyprland-plugins = {
+      url = "github:hyprwm/hyprland-plugins";
+      inputs.hyprland.follows = "hyprland";
+    };
+    nur = {
+      url = "github:nix-community/NUR";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    chaotic = {
+      url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nix-gaming = {
+      url = "github:fufexan/nix-gaming";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -13,109 +30,117 @@
       url = "github:nix-community/lanzaboote/v0.4.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    disko = {
-      url = "github:nix-community/disko";
+    asus-dialpad-driver = {
+      url = "github:asus-linux-drivers/asus-dialpad-driver";
       inputs.nixpkgs.follows = "nixpkgs";
-    };
-    darwin = {
-      url = "github:LnL7/nix-darwin/master";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    nix-homebrew = {
-      url = "github:zhaofengli-wip/nix-homebrew";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    homebrew-bundle = {
-      url = "github:homebrew/homebrew-bundle";
-      flake = false;
-    };
-    homebrew-core = {
-      url = "github:homebrew/homebrew-core";
-      flake = false;
-    };
-    homebrew-cask = {
-      url = "github:homebrew/homebrew-cask";
-      flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, flake-parts, home-manager, lanzaboote, disko, darwin, nix-homebrew, homebrew-bundle, homebrew-core, homebrew-cask, ... } @inputs: let user = "%USER%"; in flake-parts.lib.mkFlake {inherit inputs;} {
-    imports = [
-      flake-parts.flakeModules.easyOverlay
+  nixConfig = {
+    extra-substituters = [
+      "https://nix-community.cachix.org"
+      "https://chaotic-nyx.cachix.org/"
+      "https://nix-gaming.cachix.org"
+      "https://nixpkgs-wayland.cachix.org"
+      "https://hyprland.cachix.org"
     ];
-    systems = flake-utils.lib.defaultSystems;
-
-    perSystem = { config, system, pkgs, ... }: {
-      packages = import ./pkgs pkgs;
-
-      # Adding an overlay to allow access to packages through nixpkgs
-      overlayAttrs = config.packages;
-
-      devShells = {
-        default = with pkgs; mkShell {
-          nativeBuildInputs = [ bashInteractive git ];
-          shellHook = ''
-            export EDITOR=vim
-          '';
-        };
-      };
-
-      # Standalone home-manager configuration entrypoint
-      # Available through 'home-manager --flake .#username'
-      legacyPackages.homeConfigurations = { # only legacyPackages work with home-manager + flake-parts
-        mirza = home-manager.lib.homeManagerConfiguration {
-          inherit pkgs; # Home-manager requires 'pkgs' instance
-          extraSpecialArgs = {inherit inputs;};
-          modules = [
-            ./modules/nixos/home-manager.nix
-          ];
-        };
-      };
-    };
-
-    flake = {
-      # NixOS configuration entrypoint
-      # Available through 'nixos-rebuild --flake .#hostname'
-      nixosConfigurations = {
-        nixos = nixpkgs.lib.nixosSystem {
-          specialArgs = {inherit inputs;};
-          modules = [
-            disko.nixosModules.disko
-            lanzaboote.nixosModules.lanzaboote
-            home-manager.nixosModules.home-manager
-            /etc/nixos/hardware-configuration.nix
-            ./hosts/nixos
-            # Apply overlays to the system's pkgs.
-            { nixpkgs.overlays = nixpkgs.lib.attrsets.attrValues self.overlays; }
-          ];
-        };
-      };
-
-      # nix-darwin configuration entrypoint
-      # Available through 'darwin-rebuild build --flake .#hostname'
-      darwinConfigurations = {
-        hostname = darwin.lib.darwinSystem {
-          specialArgs = {inherit inputs;};
-          modules = [
-            home-manager.darwinModules.home-manager
-            nix-homebrew.darwinModules.nix-homebrew
-            {
-              nix-homebrew = {
-                inherit user;
-                enable = true;
-                taps = {
-                  "homebrew/homebrew-core" = homebrew-core;
-                  "homebrew/homebrew-cask" = homebrew-cask;
-                  "homebrew/homebrew-bundle" = homebrew-bundle;
-                };
-                mutableTaps = false;
-                autoMigrate = true;
-              };
-            }
-            ./hosts/darwin
-          ];
-        };
-      };
-    };
+    extra-trusted-public-keys = [
+      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      "chaotic-nyx.cachix.org-1:HfnXSw4pj95iI/n17rIDy40agHj12WfF+Gqk6SonIT8="
+      "nix-gaming.cachix.org-1:nbjlureqMbRAxR1gJ/f3hxemL9svXaZF/Ees8vCUUs4="
+      "nixpkgs-wayland.cachix.org-1:3lwxaILxMRkVhehr5StQprHdEo4IrE8sRho9R9HOLYA="
+      "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
+    ];
   };
+
+  outputs =
+    {
+      self,
+      nixpkgs,
+      flake-parts,
+      flake-utils,
+      hyprland,
+      hyprland-plugins,
+      nur,
+      chaotic,
+      nix-gaming,
+      home-manager,
+      ...
+    }@inputs:
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      imports = [
+        flake-parts.flakeModules.easyOverlay
+      ];
+      systems = flake-utils.lib.defaultSystems;
+
+      perSystem =
+        {
+          config,
+          system,
+          pkgs,
+          lib,
+          ...
+        }:
+        {
+          packages = import ./pkgs pkgs;
+
+          # Adding an overlay to allow access to packages through nixpkgs
+          overlayAttrs = config.packages;
+
+          # Standalone home-manager configuration entrypoint
+          # Available through 'home-manager switch --flake .#username'
+          # HACK: only legacyPackages work with home-manager + flake-parts
+          legacyPackages.homeConfigurations = lib.genAttrs (self.lib.listNixModules ./users) (
+            username:
+            home-manager.lib.homeManagerConfiguration {
+              inherit pkgs; # Home-manager requires 'pkgs' instance
+              extraSpecialArgs = {
+                inherit self inputs username;
+              };
+              modules = [
+                hyprland.homeManagerModules.default
+                chaotic.homeManagerModules.default
+                self.homeManagerModules.default
+                ./users/.shared
+                ./users/${username}
+              ];
+            }
+          );
+        };
+
+      flake = {
+        # NixOS configuration entrypoint
+        # Available through 'nixos-rebuild switch --flake .#hostname'
+        nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts) (
+          hostname:
+          nixpkgs.lib.nixosSystem {
+            specialArgs = { inherit self inputs hostname; };
+            modules = [
+              hyprland.nixosModules.default
+              nur.modules.nixos.default
+              chaotic.nixosModules.nyx-cache
+              chaotic.nixosModules.nyx-overlay
+              chaotic.nixosModules.nyx-registry
+              home-manager.nixosModules.home-manager
+              self.nixosModules.default
+              ./hosts/.shared
+              ./hosts/${hostname}
+            ];
+          }
+        );
+        modules = import ./modules;
+        nixosModules = import ./modules/nixos {
+          inherit self;
+          inherit (nixpkgs) lib;
+        };
+        homeManagerModules = import ./modules/home-manager {
+          inherit self;
+          inherit (nixpkgs) lib;
+        };
+        lib = import ./lib {
+          inherit self;
+          inherit (nixpkgs) lib;
+        };
+      };
+    };
 }
