@@ -34,6 +34,10 @@
       url = "github:asus-linux-drivers/asus-dialpad-driver";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    aagl = {
+      url = "github:ezKEa/aagl-gtk-on-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   nixConfig = {
@@ -43,6 +47,7 @@
       "https://nix-gaming.cachix.org"
       "https://nixpkgs-wayland.cachix.org"
       "https://hyprland.cachix.org"
+      "https://ezkea.cachix.org"
     ];
     extra-trusted-public-keys = [
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
@@ -50,6 +55,7 @@
       "nix-gaming.cachix.org-1:nbjlureqMbRAxR1gJ/f3hxemL9svXaZF/Ees8vCUUs4="
       "nixpkgs-wayland.cachix.org-1:3lwxaILxMRkVhehr5StQprHdEo4IrE8sRho9R9HOLYA="
       "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
+      "ezkea.cachix.org-1:ioBmUbJTZIKsHmWWXPe1FSFbeVe+afhfgqgTSNd34eI="
     ];
   };
 
@@ -65,6 +71,7 @@
       chaotic,
       nix-gaming,
       home-manager,
+      aagl,
       ...
     }@inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
@@ -122,6 +129,7 @@
               chaotic.nixosModules.nyx-overlay
               chaotic.nixosModules.nyx-registry
               home-manager.nixosModules.home-manager
+              aagl.nixosModules.default
               self.nixosModules.default
               ./hosts/.shared
               ./hosts/${hostname}
