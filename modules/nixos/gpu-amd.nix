@@ -20,10 +20,5 @@ in
   config = mkIf cfg.enable {
     boot.initrd.kernelModules = [ "amdgpu" ];
     # services.xserver.videoDrivers = [ "amdgpu" ];
-
-    hardware.amdgpu.amdvlk = {
-      enable = true;
-      support32Bit.enable = true;
-    };
   };
 }
