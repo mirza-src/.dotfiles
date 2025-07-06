@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, config, ... }:
 {
   imports = [
     ./programs.nix
@@ -39,11 +39,21 @@
 
   services.xserver.enable = true;
   services.displayManager.gdm.enable = true;
+  services.greetd = {
+    enable = false;
+    settings = {
+      default_session = {
+        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd Hyprland --sessions ${config.services.displayManager.sessionData.desktops}/share/wayland-sessions --xsessions ${config.services.displayManager.sessionData.desktops}/share/xsessions --remember --remember-user-session";
+      };
+    };
+  };
+
   modules.gnome.enable = true;
   programs.hyprland.enable = true;
   services.xserver.desktopManager.kodi.enable = true;
   services.xserver.desktopManager.kodi.package = pkgs.kodi.withPackages (
     kodiPkgs: with kodiPkgs; [
+      joystick
       youtube
       netflix
       pdfreader
