@@ -33,5 +33,6 @@
   "redhat.telemetry.enabled": false,
   "extensions.autoUpdate": false,
   "extensions.autoCheckUpdates": false,
-  "containers.containerClient": "com.microsoft.visualstudio.containers.podman"
+  "containers.containerClient": "com.microsoft.visualstudio.containers.podman",
+  "qt-qml.qmlls.useQmlImportPathEnvVar": true
 }

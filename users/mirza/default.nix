@@ -28,6 +28,7 @@
     drawio
     mailspring
     rocketchat-desktop
+    # TODO: Improve vscode extensions management
     (vscode-with-extensions.override {
       vscodeExtensions = (
         with vscode-extensions;
@@ -76,6 +77,12 @@
             publisher = "ms-azuretools";
             version = "2.0.1";
             sha256 = "3da223deda3139be6d0976944431842a6db2a8a7f631cbaa608ecd1aa4d0122c";
+          }
+          {
+            name = "qt-qml";
+            publisher = "TheQtCompany";
+            version = "1.7.0";
+            sha256 = "4237ef648704e0b70953ddd889837fcf290496e1ed47bcd53b06223cbd24f9c4";
           }
           {
             name = "umple";

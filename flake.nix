@@ -38,6 +38,14 @@
       url = "github:ezKEa/aagl-gtk-on-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    devenv = {
+      url = "github:cachix/devenv";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    devenv-root = {
+      url = "file+file:///dev/null";
+      flake = false;
+    };
   };
 
   nixConfig = {
@@ -48,6 +56,7 @@
       "https://nixpkgs-wayland.cachix.org"
       "https://hyprland.cachix.org"
       "https://ezkea.cachix.org"
+      "https://devenv.cachix.org"
     ];
     extra-trusted-public-keys = [
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
@@ -56,6 +65,7 @@
       "nixpkgs-wayland.cachix.org-1:3lwxaILxMRkVhehr5StQprHdEo4IrE8sRho9R9HOLYA="
       "hyprland.cachix.org-1:a7pgxzMz7+chwVL3/pzj6jIBMioiJM7ypFP8PwtkuGc="
       "ezkea.cachix.org-1:ioBmUbJTZIKsHmWWXPe1FSFbeVe+afhfgqgTSNd34eI="
+      "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
     ];
   };
 
@@ -72,10 +82,13 @@
       nix-gaming,
       home-manager,
       aagl,
+      devenv,
+      devenv-root,
       ...
     }@inputs:
     flake-parts.lib.mkFlake { inherit inputs; } {
       imports = [
+        devenv.flakeModule
         flake-parts.flakeModules.easyOverlay
       ];
       systems = flake-utils.lib.defaultSystems;
@@ -90,6 +103,22 @@
         }:
         {
           packages = import ./pkgs pkgs;
+
+          devenv.shells.default = {
+            name = "dotfiles";
+
+            imports = [
+              # This is just like the imports in devenv.nix.
+              # See https://devenv.sh/guides/using-with-flake-parts/#import-a-devenv-module
+              # ./devenv-foo.nix
+            ];
+
+            # https://devenv.sh/reference/options/
+            packages = with pkgs; [
+              quickshell
+              kdePackages.qtdeclarative
+            ];
+          };
 
           # Adding an overlay to allow access to packages through nixpkgs
           overlayAttrs = config.packages;
