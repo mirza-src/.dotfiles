@@ -2,6 +2,7 @@
   lib,
   pkgs,
   config,
+  options,
   ...
 }:
 with lib;
@@ -18,6 +19,10 @@ in
       enable = true;
     };
 
+    home.sessionVariables = {
+      HYPRSHOT_DIR = "${options.home.homeDirectory}/Pictures/Screenshots";
+    };
+
     home.packages = with pkgs; [
       kitty
       egl-wayland
@@ -28,6 +33,12 @@ in
       playerctl
       hyprpaper
       networkmanagerapplet
+
+      libnotify
+      swaynotificationcenter
+      hyprshot
+      hypridle
+      hyprlock
     ];
   };
 }
