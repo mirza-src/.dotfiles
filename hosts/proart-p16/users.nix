@@ -4,6 +4,7 @@
     mirza = {
       isNormalUser = true;
       description = "Mirza Esaaf Shuja";
+      initialPassword = "password"; # Change this on first login
       extraGroups = [
         "networkmanager"
         "wheel"

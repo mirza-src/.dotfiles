@@ -52,4 +52,8 @@
   };
 
   services.logind.lidSwitch = "ignore";
+
+  virtualisation.vmVariant = {
+    hardware.nvidia-container-toolkit.enable = lib.mkForce false;
+  };
 }
