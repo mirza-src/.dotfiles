@@ -23,6 +23,18 @@
   programs.wavey-launcher.enable = true;
   programs.sleepy-launcher.enable = true;
 
+  services.nginx.enable = true;
+  services.nginx.virtualHosts = {
+    localhost = {
+      locations."/" = {
+        proxyPass = "http://localhost:8000";
+      };
+      locations."=/" = {
+        proxyPass = "http://localhost:8000/umple.php";
+      };
+    };
+  };
+
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [

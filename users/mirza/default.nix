@@ -37,6 +37,7 @@
           christian-kohler.path-intellisense
           mkhl.direnv
           github.copilot
+          github.copilot-chat
           github.vscode-github-actions
           eamodio.gitlens
           visualstudioexptteam.vscodeintellicode
@@ -60,8 +61,16 @@
           haskell.haskell
           justusadam.language-haskell
           tomoki1207.pdf
+          hashicorp.hcl
+          hashicorp.terraform
         ]
         ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [
+          {
+            name = "wordcount";
+            publisher = "ms-vscode";
+            version = "0.1.0";
+            sha256 = "41be0a5372b436c53b53619666c700e96024e34e916e700ea4822fbc82389a98";
+          }
           {
             name = "vscode-containers";
             publisher = "ms-azuretools";
@@ -79,14 +88,27 @@
     })
 
     # TODO: Move to project-specific devenv configurations
-    ghc
+    (haskellPackages.ghcWithPackages (
+      pkgs: with pkgs; [
+        QuickCheck
+        cabal-install
+      ]
+    ))
     haskell-language-server
-    cabal-install
     nodejs
     python3
     jdk
     umple-bin
     glpk
+
+    # Utilities
+    bleachbit
+    czkawka-full
+    moodle-dl
+
+    azure-cli
+    kubelogin
+    postman
   ];
 
   home.file.".config/Code/User/settings.json".text = builtins.readFile ../../.vscode/settings.json;
