@@ -4,6 +4,9 @@
   programs.git.userName = "Mirza Esaaf Shuja";
   programs.git.userEmail = "mirzaesaaf@gmail.com";
 
+  modules.hyprland.enable = true;
+  wayland.windowManager.hyprland.extraConfig = builtins.readFile ./.config/hypr/hyprland.conf; # Not needed just avoiding hoome-manager warning
+
   home.packages = with pkgs; [
     wget
     curl
@@ -86,9 +89,12 @@
     glpk
   ];
 
-  home.file.".config/Code/User/settings.json".text = builtins.toJSON (
-    builtins.fromJSON (builtins.readFile ../../.vscode/settings.json)
-  );
+  home.file.".config/Code/User/settings.json".text = builtins.readFile ../../.vscode/settings.json;
+  home.file.".config" = {
+    source = ./.config;
+    target = ".config";
+    recursive = true;
+  };
 
   modules.kubernetes.enable = true;
   modules.podman.enable = true;

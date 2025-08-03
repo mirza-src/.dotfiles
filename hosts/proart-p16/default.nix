@@ -38,9 +38,9 @@
   boot.loader.efi.canTouchEfiVariables = true;
 
   services.xserver.enable = true;
-  services.displayManager.gdm.enable = true;
+  services.displayManager.gdm.enable = false;
   services.greetd = {
-    enable = false;
+    enable = true;
     settings = {
       default_session = {
         command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd Hyprland --sessions ${config.services.displayManager.sessionData.desktops}/share/wayland-sessions --xsessions ${config.services.displayManager.sessionData.desktops}/share/xsessions --remember --remember-user-session";

@@ -31,6 +31,6 @@ in
       enableUserService = true;
     };
     programs.rog-control-center.enable = true;
-    services.asus-dialpad-driver.enable = true;
+    services.asus-dialpad-driver.enable = false;
   };
 }
