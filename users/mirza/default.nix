@@ -160,8 +160,13 @@ in
   ];
 
   wayland.windowManager.hyprland.extraConfig = ''
-    source = ./hyprland-custom.conf
-  ''; # The actual config is here, which is a mutable symlink to allow live changes
+    source=hyprland/general.conf
+    source=hyprland/env.conf
+    source=hyprland/execs.conf
+    source=hyprland/keybinds.conf
+    source=hyprland/rules.conf
+    source=hyprland/permissions.conf
+  ''; # The actual configs are here, which is a mutable symlink to allow live changes
   xdg.configFile = XDGConfigMutableSymlinksRecursive; # All config files will be writable
 
   modules.kubernetes.enable = true;
