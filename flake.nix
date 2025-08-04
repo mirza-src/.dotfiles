@@ -10,6 +10,10 @@
       url = "github:hyprwm/hyprland-plugins";
       inputs.hyprland.follows = "hyprland";
     };
+    quickshell = {
+      url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     nur = {
       url = "github:nix-community/NUR";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -97,12 +101,18 @@
         {
           config,
           system,
-          pkgs,
           lib,
+          pkgs,
           ...
         }:
         {
-          packages = import ./pkgs pkgs;
+          packages = import ./pkgs (inputs // { inherit pkgs lib system; });
+          # Adding an overlay to allow access to packages through nixpkgs
+          overlayAttrs = config.packages;
+          _module.args.pkgs = import inputs.nixpkgs {
+            inherit system;
+            overlays = [ self.overlays.default ];
+          };
 
           devenv.shells.default = {
             name = "dotfiles";
@@ -115,13 +125,10 @@
 
             # https://devenv.sh/reference/options/
             packages = with pkgs; [
-              quickshell
-              kdePackages.qtdeclarative
+              quickshell-with-modules
+              qt6.qtdeclarative
             ];
           };
-
-          # Adding an overlay to allow access to packages through nixpkgs
-          overlayAttrs = config.packages;
 
           # Standalone home-manager configuration entrypoint
           # Available through 'home-manager switch --flake .#username'
