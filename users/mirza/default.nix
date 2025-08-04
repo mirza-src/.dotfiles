@@ -1,11 +1,46 @@
-{ pkgs, ... }:
+{
+  config,
+  pkgs,
+  lib,
+  inputs,
+  ...
+}:
+let
+  mkMutableSymlink =
+    path:
+    config.lib.file.mkOutOfStoreSymlink (
+      "${config.home.homeDirectory}/.dotfiles" + lib.removePrefix (toString inputs.self) (toString path)
+    );
+
+  listFilesRecursive =
+    path:
+    let
+      pathType = builtins.readFileType path;
+    in
+    if pathType == "directory" then
+      builtins.foldl' (acc: name: acc ++ listFilesRecursive (path + "/${name}")) [ ] (
+        builtins.attrNames (builtins.readDir path)
+      )
+    else if pathType == "unknown" then
+      [ ]
+    else
+      [ path ];
+
+  XDGConfigMutableSymlinksRecursive = builtins.listToAttrs (
+    builtins.map (file: {
+      name = lib.removePrefix (toString ./.) (toString file);
+      value = {
+        source = mkMutableSymlink file;
+      };
+    }) (listFilesRecursive ./.config)
+  );
+in
 {
   programs.git.enable = true;
   programs.git.userName = "Mirza Esaaf Shuja";
   programs.git.userEmail = "mirzaesaaf@gmail.com";
 
   modules.hyprland.enable = true;
-  wayland.windowManager.hyprland.extraConfig = builtins.readFile ./.config/hypr/hyprland.conf; # Not needed just avoiding hoome-manager warning
 
   home.packages = with pkgs; [
     wget
@@ -79,6 +114,12 @@
             sha256 = "3da223deda3139be6d0976944431842a6db2a8a7f631cbaa608ecd1aa4d0122c";
           }
           {
+            name = "qt-core";
+            publisher = "TheQtCompany";
+            version = "1.6.0";
+            sha256 = "9a2d9cb31ee9bbf0c97ade900ff9ede7f835aad520fea234cb4192612561eb37";
+          }
+          {
             name = "qt-qml";
             publisher = "TheQtCompany";
             version = "1.7.0";
@@ -118,12 +159,11 @@
     postman
   ];
 
-  home.file.".config/Code/User/settings.json".text = builtins.readFile ../../.vscode/settings.json;
-  home.file.".config" = {
-    source = ./.config;
-    target = ".config";
-    recursive = true;
-  };
+  home.file.".config/Code/User/settings.json".source = mkMutableSymlink ../../.vscode/settings.json;
+  wayland.windowManager.hyprland.extraConfig = ''
+    source = ./hyprland-custom.conf
+  ''; # The actual config is here, which is a mutable symlink to allow live changes
+  xdg.configFile = XDGConfigMutableSymlinksRecursive; # All config files will be writable
 
   modules.kubernetes.enable = true;
   modules.podman.enable = true;
