@@ -159,7 +159,6 @@ in
     postman
   ];
 
-  home.file.".config/Code/User/settings.json".source = mkMutableSymlink ../../.vscode/settings.json;
   wayland.windowManager.hyprland.extraConfig = ''
     source = ./hyprland-custom.conf
   ''; # The actual config is here, which is a mutable symlink to allow live changes
