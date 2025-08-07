@@ -54,6 +54,7 @@
   };
 
   services.logind.lidSwitch = "ignore";
+  security.polkit.enable = true;
 
   virtualisation.vmVariant = {
     hardware.nvidia-container-toolkit.enable = lib.mkForce false;

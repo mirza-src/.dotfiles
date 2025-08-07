@@ -18,6 +18,8 @@ in
     wayland.windowManager.hyprland = {
       enable = true;
     };
+    services.gnome-keyring.enable = true;
+    services.polkit-gnome.enable = true;
 
     home.sessionVariables = {
       HYPRSHOT_DIR = "${options.home.homeDirectory}/Pictures/Screenshots";
