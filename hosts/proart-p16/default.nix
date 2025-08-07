@@ -7,6 +7,20 @@
     ./hardware-configuration.nix
   ];
 
+  fileSystems."/home/shared" = {
+    device = "/dev/disk/by-uuid/00B2AE8E61744ADC";
+    fsType = "lowntfs-3g";
+    options = [
+      "uid=0"
+      "gid=100"
+      "rw"
+      "user"
+      "exec"
+      "nofail"
+      "umask=007"
+    ];
+  };
+
   services.printing.enable = true;
   services.fwupd.enable = true;
   networking.networkmanager.enable = true;

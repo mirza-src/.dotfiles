@@ -48,6 +48,7 @@
   home-manager.useGlobalPkgs = lib.mkDefault true;
   home-manager.useUserPackages = lib.mkDefault true;
 
+  boot.supportedFilesystems = [ "ntfs" ];
   programs.starship = {
     enable = lib.mkDefault true;
     settings = builtins.fromTOML (builtins.readFile ../.shared/.config/starship.toml);
