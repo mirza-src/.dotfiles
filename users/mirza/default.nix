@@ -42,38 +42,30 @@ in
 
   modules.hyprland.enable = true;
 
-  home.packages = with pkgs; [
-    wget
-    curl
+  programs.vscode = {
+    enable = true;
+    # mutableExtensionsDir = false;
 
-    rclone
-    catppuccin
+    package = pkgs.vscode.fhsWithPackages (
+      pkgs: with pkgs; [
+        stdenv.cc.cc.lib
+        libuuid
+      ]
+    );
 
-    # Graphical applications
-    libreoffice
-    microsoft-edge
-    google-chrome
-    veracrypt
-    vlc
-    protonplus
-    heroic
-    lutris
-    mongodb-compass
-    proton-pass
-    drawio
-    mailspring
-    rocketchat-desktop
-    # TODO: Improve vscode extensions management
-    (vscode-with-extensions.override {
-      vscodeExtensions = (
-        with vscode-extensions;
-        [
+    profiles.default.extensions =
+      # NOTE: Latest version of these extensions are not compatible with the vscode available in nixpkgs
+      (with pkgs.vscode-extensions; [
+        github.copilot-chat
+      ])
+      ++ (with pkgs.nix-vscode-extensions.vscode-marketplace; [
+        ms-azuretools.vscode-containers
+        ms-vscode.vscode-speech
           ms-vscode-remote.remote-containers
           jnoortheen.nix-ide
           christian-kohler.path-intellisense
           mkhl.direnv
           github.copilot
-          github.copilot-chat
           github.vscode-github-actions
           eamodio.gitlens
           visualstudioexptteam.vscodeintellicode
@@ -99,41 +91,34 @@ in
           tomoki1207.pdf
           hashicorp.hcl
           hashicorp.terraform
-        ]
-        ++ pkgs.vscode-utils.extensionsFromVscodeMarketplace [
-          {
-            name = "wordcount";
-            publisher = "ms-vscode";
-            version = "0.1.0";
-            sha256 = "41be0a5372b436c53b53619666c700e96024e34e916e700ea4822fbc82389a98";
-          }
-          {
-            name = "vscode-containers";
-            publisher = "ms-azuretools";
-            version = "2.0.1";
-            sha256 = "3da223deda3139be6d0976944431842a6db2a8a7f631cbaa608ecd1aa4d0122c";
-          }
-          {
-            name = "qt-core";
-            publisher = "TheQtCompany";
-            version = "1.6.0";
-            sha256 = "9a2d9cb31ee9bbf0c97ade900ff9ede7f835aad520fea234cb4192612561eb37";
-          }
-          {
-            name = "qt-qml";
-            publisher = "TheQtCompany";
-            version = "1.7.0";
-            sha256 = "4237ef648704e0b70953ddd889837fcf290496e1ed47bcd53b06223cbd24f9c4";
-          }
-          {
-            name = "umple";
-            publisher = "digized";
-            version = "1.2.1";
-            sha256 = "041de915df780688d4b83cc3fa0b979281e14d606b8f099f2401e33a0a5d3a2c";
-          }
-        ]
-      );
-    })
+        ms-vscode.wordcount
+        theqtcompany.qt-core
+        theqtcompany.qt-qml
+        digized.umple
+      ]);
+  };
+
+  home.packages = with pkgs; [
+    wget
+    curl
+
+    rclone
+    catppuccin
+
+    # Graphical applications
+    libreoffice
+    microsoft-edge
+    google-chrome
+    veracrypt
+    vlc
+    protonplus
+    heroic
+    lutris
+    mongodb-compass
+    proton-pass
+    drawio
+    mailspring
+    rocketchat-desktop
 
     # TODO: Move to project-specific devenv configurations
     (haskellPackages.ghcWithPackages (

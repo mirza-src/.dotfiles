@@ -46,6 +46,10 @@
       url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    vscode-extensions = {
+      url = "github:nix-community/nix-vscode-extensions";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     devenv-root = {
       url = "file+file:///dev/null";
       flake = false;
@@ -86,6 +90,7 @@
       nix-gaming,
       home-manager,
       aagl,
+      vscode-extensions,
       devenv,
       devenv-root,
       ...
@@ -111,7 +116,10 @@
           overlayAttrs = config.packages;
           _module.args.pkgs = import inputs.nixpkgs {
             inherit system;
-            overlays = [ self.overlays.default ];
+            overlays = [
+              vscode-extensions.overlays.default
+              self.overlays.default
+            ];
           };
 
           devenv.shells.default = {
