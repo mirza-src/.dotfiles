@@ -7,9 +7,17 @@
     ./hardware-configuration.nix
   ];
 
-  fileSystems."/home/shared" = {
-    device = "/dev/disk/by-uuid/00B2AE8E61744ADC";
-    fsType = "lowntfs-3g";
+  environment.etc.crypttab = {
+    mode = "0600";
+    text = ''
+      # <volume-name> <encrypted-device> [key-file] [options]
+      decrypted_5566d63a-c313-431f-b1eb-92783a05e978 /dev/disk/by-uuid/5566d63a-c313-431f-b1eb-92783a05e978 /etc/cryptsetup-keys.d/5DF837A3-4E01-4423-8C18-9FA849F945D2.BEK bitlk
+    '';
+  };
+
+  fileSystems."/media/5566d63a-c313-431f-b1eb-92783a05e978" = {
+    device = "/dev/mapper/decrypted_5566d63a-c313-431f-b1eb-92783a05e978";
+    fsType = "ntfs3";
     options = [
       "uid=0"
       "gid=100"
@@ -62,7 +70,7 @@
     };
   };
 
-  modules.gnome.enable = true;
+  modules.gnome.enable = false;
   programs.hyprland.enable = true;
   services.xserver.desktopManager.kodi.enable = true;
   services.xserver.desktopManager.kodi.package = pkgs.kodi.withPackages (
@@ -77,4 +85,8 @@
       bluetooth-manager
     ]
   );
+
+  services.ollama = {
+    enable = true;
+  };
 }
