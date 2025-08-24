@@ -11,7 +11,9 @@
         "docker"
         "podman"
         "input"
+        "audio"
         "video"
+        "disk"
       ];
     };
   };
