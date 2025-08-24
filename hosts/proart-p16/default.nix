@@ -32,6 +32,10 @@
   services.printing.enable = true;
   services.fwupd.enable = true;
   networking.networkmanager.enable = true;
+  networking.networkmanager.plugins = with pkgs; [
+    networkmanager-openconnect
+  ];
+
   modules.shell.enable = true;
   modules.nix.enable = true;
   modules.k3s.enable = true;
