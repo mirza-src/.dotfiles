@@ -27,6 +27,9 @@
   "[nix]": {
     "editor.defaultFormatter": "jnoortheen.nix-ide"
   },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
   "vs-kubernetes": {
     "vs-kubernetes.crd-code-completion": "enabled"
   },
