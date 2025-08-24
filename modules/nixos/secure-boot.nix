@@ -19,9 +19,15 @@ in
   };
 
   config = mkIf cfg.enable {
-    environment.systemPackages = [
-      # For debugging and troubleshooting Secure Boot.
-      pkgs.sbctl
+    environment.systemPackages = with pkgs; [
+      # Does not support DBX: https://github.com/Foxboron/sbctl/issues/23
+      sbctl
+      sbsigntool
+      efivar
+      efitools
+      efibootmgr
+      tpm-tools
+      tpm2-tools
     ];
 
     boot.lanzaboote = {
