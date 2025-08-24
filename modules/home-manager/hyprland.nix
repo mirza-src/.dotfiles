@@ -27,20 +27,34 @@ in
 
     home.packages = with pkgs; [
       kitty
-      egl-wayland
-      wofi
       kdePackages.dolphin
-      waybar
-      brightnessctl
-      playerctl
-      hyprpaper
-      networkmanagerapplet
-
+      kdePackages.ark
+      egl-wayland
       libnotify
-      swaynotificationcenter
+
       hyprshot
       hypridle
       hyprlock
+      material-symbols
+      quickshell-with-modules
+
+      cava
+      libqalculate
+      cliphist
+      ddcutil
+      translate-shell
+      brightnessctl
+      playerctl
+
+      app2unit
+      lm_sensors
+      fish
+      aubio
+      pipewire
+      glibc
+      gcc
+      grim
+      swappy
     ];
   };
 }
