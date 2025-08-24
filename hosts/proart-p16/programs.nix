@@ -53,5 +53,11 @@
     gcc
     libgcc
     gnumake
+
+    # Disk management
+    libbde
+    cryptsetup
+    dislocker
+    gparted
   ];
 }
