@@ -1,4 +1,9 @@
-{ pkgs, config, ... }:
+{
+  pkgs,
+  config,
+  lib,
+  ...
+}:
 {
   imports = [
     ./programs.nix
@@ -38,6 +43,11 @@
 
   modules.shell.enable = true;
   modules.nix.enable = true;
+  services.numtide-rke2 = {
+    enable = true;
+    settings.write-kubeconfig-mode = "0600";
+  };
+  systemd.services.numtide-rke2.wantedBy = lib.mkForce [ ];
   modules.k3s.enable = true;
 
   modules.locale = "en_US.UTF-8";
@@ -69,7 +79,7 @@
     enable = true;
     settings = {
       default_session = {
-        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd Hyprland --sessions ${config.services.displayManager.sessionData.desktops}/share/wayland-sessions --xsessions ${config.services.displayManager.sessionData.desktops}/share/xsessions --remember --remember-user-session";
+        command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd Hyprland --sessions ${config.services.displayManager.sessionData.desktops}/share/wayland-sessions --xsessions ${config.services.displayManager.sessionData.desktops}/share/xsessions --remember --remember-user-session";
       };
     };
   };

@@ -5,9 +5,17 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:numtide/flake-utils";
-    hyprland.url = "github:hyprwm/Hyprland";
+    rke2 = {
+      url = "github:numtide/nixos-rke2";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    hyprland = {
+      url = "github:hyprwm/Hyprland";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     hyprland-plugins = {
       url = "github:hyprwm/hyprland-plugins";
+      inputs.nixpkgs.follows = "nixpkgs";
       inputs.hyprland.follows = "hyprland";
     };
     quickshell = {
@@ -50,6 +58,7 @@
       url = "github:nix-community/nix-vscode-extensions";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
     devenv-root = {
       url = "file+file:///dev/null";
       flake = false;
@@ -89,6 +98,7 @@
       chaotic,
       nix-gaming,
       home-manager,
+      rke2,
       aagl,
       vscode-extensions,
       devenv,
@@ -172,6 +182,7 @@
               chaotic.nixosModules.nyx-cache
               chaotic.nixosModules.nyx-overlay
               chaotic.nixosModules.nyx-registry
+              rke2.nixosModules.default
               home-manager.nixosModules.home-manager
               aagl.nixosModules.default
               self.nixosModules.default
