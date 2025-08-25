@@ -74,6 +74,15 @@ in
       "workspaces"
       "zk-prefixer"
     ];
+    defaultSettings.communityPlugins = with pkgs; [
+      obsidian-github-embeds
+      obsidian-shiki
+    ];
+
+    vaults.tinkering = {
+      enable = true;
+      target = "Documents/tinkering";
+    };
   };
 
   programs.vscode = {

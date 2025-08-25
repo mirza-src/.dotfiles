@@ -27,6 +27,7 @@
     "flakes"
   ];
   nix.settings.trusted-users = [ "@wheel" ];
+  # TODO: Possibly read substituters and public-keys from flake.nixConfig?
   nix.settings.substituters = [
     "https://nix-community.cachix.org"
     "https://chaotic-nyx.cachix.org/"

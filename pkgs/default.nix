@@ -16,4 +16,8 @@
       ]
     )
   );
+
+  # TODO: Create nested packages overlays like obsidianPlugins.github-embeds
+  obsidian-github-embeds = pkgs.callPackage ./obsidian-plugins/github-embeds.nix { };
+  obsidian-shiki = pkgs.callPackage ./obsidian-plugins/shiki.nix { };
 }
