@@ -74,9 +74,9 @@ in
       "workspaces"
       "zk-prefixer"
     ];
-    defaultSettings.communityPlugins = with pkgs; [
-      obsidian-github-embeds
-      obsidian-shiki
+    defaultSettings.communityPlugins = with pkgs.obsidianPlugins; [
+      github-embeds
+      shiki
     ];
 
     vaults.tinkering = {

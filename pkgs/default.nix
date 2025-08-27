@@ -1,14 +1,14 @@
 {
   pkgs,
-  system,
-  quickshell,
+  inputs,
   ...
-}:
+}@args:
 {
   umple-bin = pkgs.callPackage ./umple-bin.nix { };
   microsoft-edge = pkgs.callPackage ./microsoft-edge.nix { };
+  quickshell = inputs.quickshell.packages.${pkgs.system}.quickshell;
   quickshell-with-modules = (
-    quickshell.packages.${system}.default.withModules (
+    pkgs.quickshell.withModules (
       with pkgs.qt6;
       [
         qt5compat
@@ -17,7 +17,5 @@
     )
   );
 
-  # TODO: Create nested packages overlays like obsidianPlugins.github-embeds
-  obsidian-github-embeds = pkgs.callPackage ./obsidian-plugins/github-embeds.nix { };
-  obsidian-shiki = pkgs.callPackage ./obsidian-plugins/shiki.nix { };
+  obsidianPlugins = import ./obsidian-plugins args;
 }

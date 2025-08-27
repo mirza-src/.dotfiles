@@ -1,12 +1,29 @@
 {
-  description = "Configuration for MacOS and NixOS";
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-parts.url = "github:hercules-ci/flake-parts";
     flake-utils.url = "github:numtide/flake-utils";
-    rke2 = {
-      url = "github:numtide/nixos-rke2";
+    home-manager = {
+      url = "github:nix-community/home-manager";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    devenv = {
+      url = "github:cachix/devenv";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    chaotic = {
+      url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    nur = {
+      url = "github:nix-community/NUR";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    lanzaboote = {
+      url = "github:nix-community/lanzaboote/v0.4.2";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    asus-dialpad-driver = {
+      url = "github:asus-linux-drivers/asus-dialpad-driver";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hyprland = {
@@ -22,46 +39,21 @@
       url = "git+https://git.outfoxxed.me/outfoxxed/quickshell";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nur = {
-      url = "github:nix-community/NUR";
+    vscode-extensions = {
+      url = "github:nix-community/nix-vscode-extensions";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    chaotic = {
-      url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
+    rke2 = {
+      url = "github:numtide/nixos-rke2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nix-gaming = {
       url = "github:fufexan/nix-gaming";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    home-manager = {
-      url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    lanzaboote = {
-      url = "github:nix-community/lanzaboote/v0.4.2";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    asus-dialpad-driver = {
-      url = "github:asus-linux-drivers/asus-dialpad-driver";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     aagl = {
       url = "github:ezKEa/aagl-gtk-on-nix";
       inputs.nixpkgs.follows = "nixpkgs";
-    };
-    devenv = {
-      url = "github:cachix/devenv";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    vscode-extensions = {
-      url = "github:nix-community/nix-vscode-extensions";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    devenv-root = {
-      url = "file+file:///dev/null";
-      flake = false;
     };
   };
 
@@ -90,68 +82,41 @@
     {
       self,
       nixpkgs,
-      flake-parts,
       flake-utils,
+      home-manager,
+      devenv,
+      chaotic,
+      nur,
+      lanzaboote,
+      asus-dialpad-driver,
       hyprland,
       hyprland-plugins,
-      nur,
-      chaotic,
-      nix-gaming,
-      home-manager,
-      rke2,
-      aagl,
+      quickshell,
       vscode-extensions,
-      devenv,
-      devenv-root,
+      rke2,
+      nix-gaming,
+      aagl,
       ...
     }@inputs:
-    flake-parts.lib.mkFlake { inherit inputs; } {
-      imports = [
-        devenv.flakeModule
-        flake-parts.flakeModules.easyOverlay
-      ];
-      systems = flake-utils.lib.defaultSystems;
-
-      perSystem =
-        {
-          config,
-          system,
-          lib,
-          pkgs,
-          ...
-        }:
-        {
-          packages = import ./pkgs (inputs // { inherit pkgs lib system; });
-          # Adding an overlay to allow access to packages through nixpkgs
-          overlayAttrs = config.packages;
-          _module.args.pkgs = import inputs.nixpkgs {
-            inherit system;
-            overlays = [
-              vscode-extensions.overlays.default
-              self.overlays.default
-            ];
-          };
-
-          devenv.shells.default = {
-            name = "dotfiles";
-
-            imports = [
-              # This is just like the imports in devenv.nix.
-              # See https://devenv.sh/guides/using-with-flake-parts/#import-a-devenv-module
-              # ./devenv-foo.nix
-            ];
-
-            # https://devenv.sh/reference/options/
-            packages = with pkgs; [
-              quickshell-with-modules
-              qt6.qtdeclarative
-            ];
-          };
-
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        lib = nixpkgs.lib;
+        pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+          # Adding an overlay to allow access to all packages through nixpkgs
+          overlays = [
+            vscode-extensions.overlays.default
+            self.overlays.default
+          ];
+        };
+      in
+      {
+        packages = import ./pkgs { inherit pkgs lib inputs; } // {
           # Standalone home-manager configuration entrypoint
           # Available through 'home-manager switch --flake .#username'
-          # HACK: only legacyPackages work with home-manager + flake-parts
-          legacyPackages.homeConfigurations = lib.genAttrs (self.lib.listNixModules ./users) (
+          homeConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./users) (
             username:
             home-manager.lib.homeManagerConfiguration {
               inherit pkgs; # Home-manager requires 'pkgs' instance
@@ -169,41 +134,67 @@
           );
         };
 
-      flake = {
-        # NixOS configuration entrypoint
-        # Available through 'nixos-rebuild switch --flake .#hostname'
-        nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts) (
-          hostname:
-          nixpkgs.lib.nixosSystem {
-            specialArgs = { inherit self inputs hostname; };
-            modules = [
-              hyprland.nixosModules.default
-              nur.modules.nixos.default
-              chaotic.nixosModules.nyx-cache
-              chaotic.nixosModules.nyx-overlay
-              chaotic.nixosModules.nyx-registry
-              rke2.nixosModules.default
-              home-manager.nixosModules.home-manager
-              aagl.nixosModules.default
-              self.nixosModules.default
-              ./hosts/.shared
-              ./hosts/${hostname}
-            ];
-          }
-        );
-        modules = import ./modules;
-        nixosModules = import ./modules/nixos {
-          inherit self;
-          inherit (nixpkgs) lib;
+        devShells.default = devenv.lib.mkShell {
+          inherit inputs pkgs;
+          modules = [
+            (
+              { config, pkgs, ... }:
+              {
+                name = "dotfiles";
+
+                # https://devenv.sh/reference/options/
+                packages = with pkgs; [
+                  hello
+                  quickshell-with-modules
+                  qt6.qtdeclarative
+                ];
+              }
+            )
+          ];
         };
-        homeManagerModules = import ./modules/home-manager {
-          inherit self;
+      }
+    )
+    // {
+      # NixOS configuration entrypoint
+      # Available through 'nixos-rebuild switch --flake .#hostname'
+      nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts) (
+        hostname:
+        nixpkgs.lib.nixosSystem {
+          specialArgs = { inherit self inputs hostname; };
+          modules = [
+            hyprland.nixosModules.default
+            nur.modules.nixos.default
+            chaotic.nixosModules.nyx-cache
+            chaotic.nixosModules.nyx-overlay
+            chaotic.nixosModules.nyx-registry
+            rke2.nixosModules.default
+            home-manager.nixosModules.home-manager
+            aagl.nixosModules.default
+            self.nixosModules.default
+            ./hosts/.shared
+            ./hosts/${hostname}
+          ];
+        }
+      );
+
+      overlays.default =
+        final: prev:
+        import ./pkgs {
+          inherit inputs;
           inherit (nixpkgs) lib;
+          pkgs = final;
         };
-        lib = import ./lib {
-          inherit self;
-          inherit (nixpkgs) lib;
-        };
+
+      lib = import ./lib {
+        inherit self;
+        inherit (nixpkgs) lib;
       };
+
+      modules = import ./modules {
+        inherit self;
+        inherit (nixpkgs) lib;
+      };
+      nixosModules = self.modules.nixos;
+      homeManagerModules = self.modules.home-manager;
     };
 }
