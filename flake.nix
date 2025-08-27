@@ -182,7 +182,7 @@
         import ./pkgs {
           inherit inputs;
           inherit (nixpkgs) lib;
-          pkgs = final;
+          pkgs = prev; # Using prev to allow merging of nested packages like under `haskellPackages`
         };
 
       lib = import ./lib {
