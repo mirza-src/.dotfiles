@@ -1,4 +1,9 @@
-{ self, pkgs, lib, username, ... }:
+{
+  pkgs,
+  lib,
+  username,
+  ...
+}:
 {
   # This value determines the Home Manager release that your configuration is
   # compatible with. This helps avoid breakage when a new Home Manager release
@@ -9,10 +14,7 @@
   # release notes.
   home.stateVersion = lib.mkDefault "25.05"; # Please read the comment before changing.
 
-  # Apply overlays to the system's pkgs.
-  nixpkgs.overlays = lib.attrValues self.overlays;
   home.username = lib.mkDefault username;
   home.homeDirectory = lib.mkDefault "/home/${username}";
   nix.package = lib.mkDefault pkgs.nix;
-  nixpkgs.config.allowUnfree = lib.mkDefault true;
 }
