@@ -154,7 +154,6 @@ in
         ms-vscode.wordcount
         theqtcompany.qt-core
         theqtcompany.qt-qml
-        digized.umple
       ]);
   };
 
@@ -190,7 +189,6 @@ in
     nodejs
     python3
     jdk
-    umple-bin
     glpk
 
     # Utilities
@@ -218,13 +216,4 @@ in
   modules.podman.enable = true;
   modules.podman.tui = true;
   modules.vpn.enable = true;
-  services.podman.containers = {
-    umple = {
-      image = "umple/umpleonline";
-      ports = [ "8000:8000" ];
-      volumes = [
-        "umple:/var/www/ump"
-      ];
-    };
-  };
 }
