@@ -17,7 +17,7 @@ in
     environment.systemPackages = with pkgs; [
       kubectl
       kubectx
-      helm
+      kubernetes-helm
     ];
 
     services.k3s = {

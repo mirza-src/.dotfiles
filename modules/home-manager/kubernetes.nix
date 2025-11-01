@@ -19,8 +19,8 @@ in
       kubectx
       kubelogin
       kubelogin-oidc
+      kubernetes-helm
       stern
-      helm
       helmfile
       kubetail
       lens
