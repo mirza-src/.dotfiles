@@ -15,6 +15,9 @@
   programs.git-worktree-switcher.enable = true;
   programs.vim.enable = true;
   programs.firefox.enable = true;
+  programs.firefox.wrapperConfig = {
+    pipewireSupport = true;
+  };
 
   programs.anime-games-launcher.enable = false;
   programs.anime-game-launcher.enable = true;
