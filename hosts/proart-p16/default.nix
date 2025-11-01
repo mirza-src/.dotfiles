@@ -43,12 +43,8 @@
 
   modules.shell.enable = true;
   modules.nix.enable = true;
-  services.numtide-rke2 = {
-    enable = true;
-    settings.write-kubeconfig-mode = "0600";
-  };
-  systemd.services.numtide-rke2.wantedBy = lib.mkForce [ ];
-  modules.k3s.enable = true;
+  services.rke2.enable = false;
+  modules.k3s.enable = false;
 
   modules.locale = "en_US.UTF-8";
   services.xserver.xkb.layout = "us";
@@ -75,13 +71,9 @@
 
   services.xserver.enable = true;
   services.displayManager.gdm.enable = false;
-  services.greetd = {
+  programs.dankMaterialShell.greeter = {
     enable = true;
-    settings = {
-      default_session = {
-        command = "${pkgs.tuigreet}/bin/tuigreet --time --cmd Hyprland --sessions ${config.services.displayManager.sessionData.desktops}/share/wayland-sessions --xsessions ${config.services.displayManager.sessionData.desktops}/share/xsessions --remember --remember-user-session";
-      };
-    };
+    compositor.name = "hyprland";
   };
 
   modules.gnome.enable = false;

@@ -1,5 +1,7 @@
 { ... }:
 {
+  programs.dankMaterialShell.greeter.configHome = "/home/mirza";
+
   users.users = {
     mirza = {
       isNormalUser = true;

@@ -41,6 +41,14 @@ in
   programs.git.userEmail = "mirzaesaaf@gmail.com";
 
   modules.hyprland.enable = true;
+  programs.dankMaterialShell = {
+    enable = true;
+
+    plugins = with pkgs.dmsPlugins; {
+      power-usage.enable = true;
+      power-usage.src = power-usage;
+    };
+  };
 
   programs.obsidian = {
     enable = true;
@@ -150,7 +158,6 @@ in
 
     # Graphical applications
     libreoffice
-    microsoft-edge
     google-chrome
     veracrypt
     vlc

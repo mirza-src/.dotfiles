@@ -4,7 +4,7 @@
     with pkgs;
     [
       font-awesome
-      noto-fonts-emoji
+      noto-fonts-color-emoji
       meslo-lgs-nf
     ]
     ++ builtins.filter lib.attrsets.isDerivation (builtins.attrValues pkgs.nerd-fonts);

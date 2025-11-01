@@ -17,4 +17,5 @@
   home.username = lib.mkDefault username;
   home.homeDirectory = lib.mkDefault "/home/${username}";
   nix.package = lib.mkDefault pkgs.nix;
+  nixpkgs.config.allowUnfree = lib.mkDefault true;
 }

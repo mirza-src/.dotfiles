@@ -16,7 +16,7 @@
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  system.stateVersion = lib.mkDefault "24.11"; # Did you read the comment?
+  system.stateVersion = lib.mkDefault "25.05"; # Did you read the comment?
 
   networking.hostName = lib.mkDefault hostname;
   # Apply overlays to the system's pkgs.
@@ -55,7 +55,7 @@
     settings = builtins.fromTOML (builtins.readFile ../.shared/.config/starship.toml);
   };
 
-  services.logind.lidSwitch = "ignore";
+  services.logind.settings.Login.HandleLidSwitch = "ignore";
   security.polkit.enable = true;
 
   virtualisation.vmVariant = {

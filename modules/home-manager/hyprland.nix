@@ -36,7 +36,6 @@ in
       hypridle
       hyprlock
       material-symbols
-      quickshell-with-modules
 
       cava
       libqalculate
@@ -50,7 +49,6 @@ in
       lm_sensors
       fish
       aubio
-      pipewire
       glibc
       gcc
       grim
