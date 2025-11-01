@@ -1,4 +1,7 @@
 {
+  "extensions.autoUpdate": false,
+  "extensions.autoCheckUpdates": false,
+
   "git.autofetch": true,
   "git.confirmSync": false,
   "git.replaceTagsWhenPull": true,
@@ -10,7 +13,13 @@
   "editor.codeActionsOnSave": {
     "source.organizeImports": "always"
   },
+  "diffEditor.ignoreTrimWhitespace": false,
   "terminal.integrated.scrollback": 100000,
+  "vs-kubernetes": {
+    "vs-kubernetes.crd-code-completion": "enabled"
+  },
+  "containers.containerClient": "com.microsoft.visualstudio.containers.podman",
+  "redhat.telemetry.enabled": false,
   "typescript.updateImportsOnFileMove.enabled": "always",
   "nix.enableLanguageServer": true,
   "nix.serverPath": "nil",
@@ -29,13 +38,5 @@
   },
   "[go]": {
     "editor.defaultFormatter": "golang.go"
-  },
-  "vs-kubernetes": {
-    "vs-kubernetes.crd-code-completion": "enabled"
-  },
-  "redhat.telemetry.enabled": false,
-  "extensions.autoUpdate": false,
-  "extensions.autoCheckUpdates": false,
-  "containers.containerClient": "com.microsoft.visualstudio.containers.podman",
-  "qt-qml.qmlls.useQmlImportPathEnvVar": true
+  }
 }
