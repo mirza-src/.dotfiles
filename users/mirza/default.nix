@@ -216,6 +216,7 @@ in
 
   modules.kubernetes.enable = true;
   modules.podman.enable = true;
+  modules.podman.tui = true;
   modules.vpn.enable = true;
   services.podman.containers = {
     umple = {

@@ -11,21 +11,30 @@ in
 {
   options.modules.podman = {
     enable = mkEnableOption "Enable Podman for container management";
-    dockerAlias = mkOption {
-      type = types.bool;
+
+    tui = mkEnableOption "Enable Podman TUI" // {
       default = true;
-      description = "Create an alias for 'docker' to 'podman'";
     };
+
+    desktop = mkEnableOption "Enable Podman Desktop application";
+
+    dockerAlias =
+      mkEnableOption "Alias docker and docker-compose commands to podman and podman-compose respectively"
+      // {
+        default = false;
+      };
   };
 
   config = mkIf cfg.enable {
     services.podman.enable = true;
 
-    home.packages = with pkgs; [
-      podman-compose
-      podman-tui
-      podman-desktop
-    ];
+    home.packages =
+      with pkgs;
+      [
+        podman-compose
+      ]
+      ++ (if cfg.tui then [ podman-tui ] else [ ])
+      ++ (if cfg.desktop then [ podman-desktop ] else [ ]);
 
     home.shellAliases = mkIf cfg.dockerAlias {
       docker = "podman";
