@@ -1,0 +1,12 @@
+diff --git a/get-power-usage b/get-power-usage
+index 5356ab6..76d1eaa 100755
+--- a/get-power-usage
++++ b/get-power-usage
+@@ -1,6 +1,6 @@
+ #!/bin/bash
+ 
+-bat_info_path="/sys/class/power_supply/BAT0"
++bat_info_path="/sys/class/power_supply/BAT1"
+ 
+ # Check if the direct power reading is available
+ if [ -f "${bat_info_path}/power_now" ]; then

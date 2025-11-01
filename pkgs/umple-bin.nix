@@ -1,9 +1,17 @@
-{ jdk, makeWrapper, stdenv, ... }: stdenv.mkDerivation (finalAttrs: {
-  name = "umple-bin";
+{
+  fetchurl,
+  jdk,
+  makeWrapper,
+  stdenv,
+  ...
+}:
+stdenv.mkDerivation (finalAttrs: {
+  pname = "umple-bin";
+  version = "1.35.0.7523.c616a4dce";
 
-  src = builtins.fetchurl {
+  src = fetchurl {
     name = "umple.jar";
-    url = "https://github.com/umple/umple/releases/download/v1.35.0/umple-1.35.0.7523.c616a4dce.jar";
+    url = "https://github.com/umple/umple/releases/download/v${finalAttrs.version}/umple-${finalAttrs.version}.jar";
     sha256 = "sha256:1cqbz2hf09mkvgl7s953l28hzv089c7xkp7rxcc68f9jfixn6fs9";
   };
 
