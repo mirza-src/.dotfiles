@@ -60,6 +60,7 @@
   services.automatic-timezoned.enable = true;
 
   modules.audio.enable = true;
+  modules.bluetooth.enable = true;
   modules.asus.enable = true;
   modules.gpu.enable = true;
   modules.gpu-amd.enable = true;
