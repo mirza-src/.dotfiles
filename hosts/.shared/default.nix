@@ -22,6 +22,7 @@
   # Apply overlays to the system's pkgs.
   nixpkgs.overlays = lib.attrValues self.overlays;
   nixpkgs.config.allowUnfree = lib.mkDefault true;
+  nix.nixPath = [ "nixpkgs=${inputs.nixpkgs}" ];
   nix.settings.experimental-features = [
     "nix-command"
     "flakes"

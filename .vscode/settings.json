@@ -22,15 +22,24 @@
   "redhat.telemetry.enabled": false,
   "typescript.updateImportsOnFileMove.enabled": "always",
   "nix.enableLanguageServer": true,
-  "nix.serverPath": "nil",
+  "nix.serverPath": "nixd",
   "nix.formatterPath": "nixfmt",
   "nix.serverSettings": {
-    "nil": {
-      "formatting": { "command": ["nixfmt"] },
-      "nix": { "maxMemoryMB": 4096, "flake": { "autoEvalInputs": true } }
-    },
     "nixd": {
-      "formatting": { "command": ["nixfmt"] }
+      "formatting": {
+        "command": ["nixfmt"]
+      },
+      "nixpkgs": {
+        "expr": "import <nixpkgs> { }"
+      },
+      "options": {
+        "nixos": {
+          "expr": "(builtins.getFlake (builtins.toString ./.)).nixosConfigurations.proart-p16.options"
+        },
+        "home-manager": {
+          "expr": "(builtins.getFlake (builtins.toString ./.)).packages.x86_64-linux.homeConfigurations.mirza.options"
+        }
+      }
     }
   },
   "[nix]": {
