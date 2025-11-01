@@ -103,4 +103,10 @@
   services.ollama = {
     enable = true;
   };
+
+  virtualisation.libvirtd.enable = true;
+  virtualisation.incus.enable = true;
+  virtualisation.incus.ui.enable = true;
+  networking.nftables.enable = true;
+  networking.firewall.trustedInterfaces = [ "incusbr0" ];
 }

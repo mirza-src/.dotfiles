@@ -16,6 +16,7 @@
         "audio"
         "video"
         "disk"
+        "incus-admin"
       ];
     };
   };
