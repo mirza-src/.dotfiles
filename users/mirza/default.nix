@@ -36,10 +36,10 @@ let
   );
 in
 {
+  modules.giantswarm.enable = true;
   programs.git.enable = true;
   programs.git.userName = "Mirza Esaaf Shuja";
   programs.git.userEmail = "mirzaesaaf@gmail.com";
-
   modules.hyprland.enable = true;
   programs.dankMaterialShell = {
     enable = true;
