@@ -11,6 +11,10 @@ in
 {
   options.modules.vpn = {
     enable = mkEnableOption "Enable VPN tools";
+
+    networkmanager = {
+      enable = mkEnableOption "Enable NetworkManager Integration";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -20,8 +24,9 @@ in
         eduvpn-client
         protonvpn-gui
         openconnect
+        wireguard-tools
       ]
-      ++ (lib.optionals (config.networking.networkmanager.enable) [
+      ++ (lib.optionals (cfg.networkmanager.enable) [
         networkmanager-openconnect
       ]);
   };

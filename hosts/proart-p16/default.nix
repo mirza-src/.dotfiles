@@ -36,6 +36,7 @@
 
   services.printing.enable = true;
   services.fwupd.enable = true;
+  networking.wireguard.enable = true;
   networking.networkmanager.enable = true;
   networking.networkmanager.plugins = with pkgs; [
     networkmanager-openconnect
