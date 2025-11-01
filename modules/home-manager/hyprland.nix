@@ -26,6 +26,7 @@ in
     };
 
     home.packages = with pkgs; [
+      gcr # https://github.com/nix-community/home-manager/issues/1454#issuecomment-2781057551
       kitty
       kdePackages.dolphin
       kdePackages.ark
