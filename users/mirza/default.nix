@@ -36,6 +36,7 @@ let
   );
 in
 {
+  programs.zsh.enable = true;
   programs.git = {
     enable = true;
     signing.signByDefault = true;
