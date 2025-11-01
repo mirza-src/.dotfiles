@@ -57,6 +57,7 @@
 
   services.logind.settings.Login.HandleLidSwitch = "ignore";
   security.polkit.enable = true;
+  programs.ssh.startAgent = true;
 
   virtualisation.vmVariant = {
     hardware.nvidia-container-toolkit.enable = lib.mkForce false;
