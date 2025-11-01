@@ -36,10 +36,18 @@ let
   );
 in
 {
+  programs.git = {
+    enable = true;
+    signing.signByDefault = true;
+    signing.format = "ssh";
+    signing.key = "~/.ssh/id_ed25519";
+    settings = {
+      user.name = "Mirza Esaaf Shuja";
+      user.email = "mirzaesaaf@gmail.com";
+    };
+  };
+
   modules.giantswarm.enable = true;
-  programs.git.enable = true;
-  programs.git.userName = "Mirza Esaaf Shuja";
-  programs.git.userEmail = "mirzaesaaf@gmail.com";
   modules.hyprland.enable = true;
   programs.dankMaterialShell = {
     enable = true;
