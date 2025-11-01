@@ -20,7 +20,7 @@ in
         gojq
         teleport
         helm-schema-gen
-        certManager.helm-tool
+        cert-manager.helm-tool
         nancy
         go
       ]

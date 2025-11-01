@@ -53,7 +53,7 @@ in
   programs.dankMaterialShell = {
     enable = true;
 
-    plugins = with pkgs.dmsPlugins; {
+    plugins = with pkgs.dms-plugins; {
       power-usage.enable = true;
       power-usage.src = power-usage;
     };
@@ -91,7 +91,7 @@ in
       "workspaces"
       "zk-prefixer"
     ];
-    defaultSettings.communityPlugins = with pkgs.obsidianPlugins; [
+    defaultSettings.communityPlugins = with pkgs.obsidian-plugins; [
       github-embeds
       shiki
     ];
