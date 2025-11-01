@@ -34,6 +34,12 @@
     ];
   };
 
+  # Bind mount for Steam compdata, primarily for Proton as it causes issues with NTFS
+  fileSystems."/media/5566d63a-c313-431f-b1eb-92783a05e978/SteamLibrary/steamapps/compatdata" = {
+    device = "/home/mirza/.local/share/Steam/steamapps/compatdata"; # TODO: Use a system directory
+    options = [ "bind" ];
+  };
+
   services.printing.enable = true;
   services.fwupd.enable = true;
   networking.wireguard.enable = true;
