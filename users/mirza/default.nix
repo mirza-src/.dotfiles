@@ -196,9 +196,13 @@ in
     czkawka-full
     moodle-dl
 
-    azure-cli
+    (azure-cli.withExtensions [ azure-cli.extensions.ssh ])
     kubelogin
     postman
+    kitty
+    vagrant
+    ansible
+    slack
   ];
 
   wayland.windowManager.hyprland.extraConfig = ''

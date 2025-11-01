@@ -33,6 +33,8 @@
     wget
     curl
     inetutils
+    jq
+    yq
 
     # Device management
     fwup
