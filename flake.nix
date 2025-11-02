@@ -95,7 +95,6 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        lib = nixpkgs.lib;
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
@@ -105,38 +104,37 @@
             self.overlays.default
           ];
         };
+
+        # packagesFromDirectoryRecursive includes functions like callPackage
+        localPackages = nixpkgs.lib.filterAttrsRecursive (_: pkg: nixpkgs.lib.isDerivation pkg) (
+          self.overlays.default pkgs pkgs
+        );
       in
       {
-        packages =
-          import ./pkgs {
-            inherit
-              self
-              pkgs
-              lib
-              inputs
-              ;
-          }
-          // {
-            # Standalone home-manager configuration entrypoint
-            # Available through 'home-manager switch --flake .#username'
-            homeConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./users) (
-              username:
-              home-manager.lib.homeManagerConfiguration {
-                inherit pkgs; # Home-manager requires 'pkgs' instance
-                extraSpecialArgs = {
-                  inherit self inputs username;
-                };
-                modules = [
-                  dankMaterialShell.homeModules.dankMaterialShell.default
-                  hyprland.homeManagerModules.default
-                  chaotic.homeManagerModules.default
-                  self.homeManagerModules.default
-                  ./users/.shared
-                  ./users/${username}
-                ];
-              }
-            );
-          };
+        # Only direct derivations should be exposed through 'packages'
+        packages = nixpkgs.lib.filterAttrs (_: pkg: nixpkgs.lib.isDerivation pkg) localPackages;
+
+        legacyPackages = localPackages // {
+          # Standalone home-manager configuration entrypoint
+          # Available through 'home-manager switch --flake .#username'
+          homeConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./users) (
+            username:
+            home-manager.lib.homeManagerConfiguration {
+              inherit pkgs; # Home-manager requires 'pkgs' instance
+              extraSpecialArgs = {
+                inherit self inputs username;
+              };
+              modules = [
+                dankMaterialShell.homeModules.dankMaterialShell.default
+                hyprland.homeManagerModules.default
+                chaotic.homeManagerModules.default
+                self.homeManagerModules.default
+                ./users/.shared
+                ./users/${username}
+              ];
+            }
+          );
+        };
 
         devShells.default = devenv.lib.mkShell {
           inherit inputs pkgs;
@@ -177,13 +175,7 @@
         }
       );
 
-      overlays.default =
-        final: prev:
-        import ./pkgs {
-          inherit self inputs;
-          inherit (nixpkgs) lib;
-          pkgs = prev; # Using prev to allow merging of nested packages like under `haskellPackages`
-        };
+      overlays.default = import ./overlay.nix;
 
       lib = import ./lib {
         inherit self;

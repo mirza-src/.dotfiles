@@ -5,7 +5,9 @@ rec {
   listNixModules =
     dir:
     lib.mapAttrsToList (name: _: lib.removeSuffix ".nix" name) (
-      lib.filterAttrs (name: type: type == "directory" || isNixFile name) (builtins.readDir dir)
+      lib.filterAttrs (name: type: name != ".shared" && (type == "directory" || isNixFile name)) (
+        builtins.readDir dir
+      )
     );
 
   getModulesPerFile =
