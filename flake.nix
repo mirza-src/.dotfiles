@@ -188,5 +188,13 @@
       };
       nixosModules = self.modules.nixos;
       homeManagerModules = self.modules.home-manager;
+
+      templates =
+        nixpkgs.lib.genAttrs (self.lib.listNixModules ./templates) (template: {
+          path = ./templates/${template};
+        })
+        // {
+          default = self.templates.devenv;
+        };
     };
 }
