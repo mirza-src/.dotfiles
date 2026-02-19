@@ -12,7 +12,6 @@ in
 {
   imports = [
     inputs.asus-dialpad-driver.nixosModules.default
-    # inputs.chaotic.nixosModules.nyx-overlay
   ];
 
   options.modules.asus = {
@@ -20,7 +19,14 @@ in
   };
 
   config = mkIf cfg.enable {
-    boot.kernelPackages = mkDefault pkgs.linuxPackages_cachyos; # From Chaotic NixOS
+    nixpkgs.overlays = [
+      inputs.cachyos-kernel.overlays.default
+    ];
+
+    boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4;
+    boot.extraModprobeConfig = ''
+      options asus_wmi fnlock_default=Y
+    '';
     hardware.enableAllFirmware = true;
     hardware.enableAllHardware = true;
     environment.systemPackages = with pkgs; [

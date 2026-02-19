@@ -6,12 +6,12 @@ rec {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    devenv = {
-      url = "github:cachix/devenv";
+    cachyos-kernel = {
+      url = "github:xddxdd/nix-cachyos-kernel";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    chaotic = {
-      url = "github:chaotic-cx/nyx/nyxpkgs-unstable";
+    devenv = {
+      url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     nur = {
@@ -81,13 +81,9 @@ rec {
       flake-utils,
       home-manager,
       devenv,
-      chaotic,
       nur,
-      lanzaboote,
-      asus-dialpad-driver,
       hyprland,
       vscode-extensions,
-      nix-gaming,
       aagl,
       dankMaterialShell,
       ...
@@ -127,7 +123,6 @@ rec {
               modules = [
                 dankMaterialShell.homeModules.dankMaterialShell.default
                 hyprland.homeManagerModules.default
-                chaotic.homeManagerModules.default
                 self.homeManagerModules.default
                 ./users/.shared
                 ./users/${username}
@@ -170,9 +165,6 @@ rec {
             hyprland.nixosModules.default
             dankMaterialShell.nixosModules.greeter
             nur.modules.nixos.default
-            chaotic.nixosModules.nyx-cache
-            chaotic.nixosModules.nyx-overlay
-            chaotic.nixosModules.nyx-registry
             home-manager.nixosModules.home-manager
             aagl.nixosModules.default
             self.nixosModules.default
