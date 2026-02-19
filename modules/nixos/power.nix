@@ -20,6 +20,7 @@ in
 
     services.thermald.enable = true;
     services.power-profiles-daemon.enable = true;
+    services.upower.enable = true;
 
     environment.systemPackages = with pkgs; [
       powertop
