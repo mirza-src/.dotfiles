@@ -41,10 +41,10 @@ in
 
   config = lib.mkIf cfg.enable {
     services.ssh-agent = {
-      enableBashIntegration = false;
-      enableZshIntegration = false;
-      enableFishIntegration = false;
-      enableNushellIntegration = false;
+      enableBashIntegration = lib.mkForce false;
+      enableZshIntegration = lib.mkForce false;
+      enableFishIntegration = lib.mkForce false;
+      enableNushellIntegration = lib.mkForce false;
     };
 
     ## Single stable socket for everything
