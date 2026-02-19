@@ -18,7 +18,7 @@ in
       nil
       nixd
       alejandra
-      nixfmt-rfc-style
+      nixfmt
       home-manager
       devenv
       vulnix
