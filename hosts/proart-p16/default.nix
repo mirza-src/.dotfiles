@@ -95,4 +95,27 @@
   virtualisation.incus.ui.enable = true;
   networking.firewall.trustedInterfaces = [ "incusbr0" ];
   virtualisation.spiceUSBRedirection.enable = true;
+
+  networking.wg-quick.interfaces.hs-fulda = {
+    autostart = false;
+    address = [
+      "10.248.0.9/19"
+      "2001:638:301:f820::9/64"
+    ];
+    dns = [
+      "10.0.0.53"
+      "2001:638:301::53"
+    ];
+    privateKeyFile = "/home/mirza/.wg/hs-fulda.key";
+    peers = [
+      {
+        endpoint = "eduvpn01.rz.hs-fulda.de:443";
+        publicKey = "E9rVjRfxl5F6amOjc5FBQ7+1minLp60LetMF/y2N3wE=";
+        allowedIPs = [
+          "0.0.0.0/0"
+          "::/0"
+        ];
+      }
+    ];
+  };
 }
