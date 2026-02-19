@@ -1,4 +1,4 @@
-{
+rec {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
@@ -158,7 +158,14 @@
       nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts) (
         hostname:
         nixpkgs.lib.nixosSystem {
-          specialArgs = { inherit self inputs hostname; };
+          specialArgs = {
+            inherit
+              self
+              inputs
+              hostname
+              nixConfig
+              ;
+          };
           modules = [
             hyprland.nixosModules.default
             dankMaterialShell.nixosModules.greeter
