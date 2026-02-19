@@ -58,7 +58,7 @@ in
 
   modules.giantswarm.enable = true;
   modules.hyprland.enable = true;
-  programs.dankMaterialShell = {
+  programs.dank-material-shell = {
     enable = true;
 
     plugins = with pkgs.dms-plugins; {

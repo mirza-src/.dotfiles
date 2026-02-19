@@ -79,7 +79,7 @@
 
   services.xserver.enable = true;
   services.displayManager.gdm.enable = false;
-  programs.dankMaterialShell.greeter = {
+  programs.dank-material-shell.greeter = {
     enable = true;
     compositor.name = "hyprland";
   };

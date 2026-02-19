@@ -1,11 +1,12 @@
 { ... }:
 {
-  programs.dankMaterialShell.greeter.configHome = "/home/mirza";
+  programs.dank-material-shell.greeter.configHome = "/home/mirza";
 
   users.users = {
     mirza = {
       isNormalUser = true;
       description = "Mirza Esaaf Shuja";
+      autoSubUidGidRange = true;
       initialPassword = "password"; # Change this on first login
       extraGroups = [
         "networkmanager"
@@ -17,6 +18,7 @@
         "video"
         "disk"
         "incus-admin"
+        "libvirt"
       ];
     };
   };

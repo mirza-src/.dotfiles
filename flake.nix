@@ -47,7 +47,7 @@ rec {
       url = "github:ezKEa/aagl-gtk-on-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    dankMaterialShell = {
+    dank-material-shell = {
       url = "github:AvengeMedia/DankMaterialShell";
       inputs.nixpkgs.follows = "nixpkgs";
     };
@@ -85,7 +85,7 @@ rec {
       hyprland,
       vscode-extensions,
       aagl,
-      dankMaterialShell,
+      dank-material-shell,
       ...
     }@inputs:
     flake-utils.lib.eachDefaultSystem (
@@ -121,7 +121,7 @@ rec {
                 inherit self inputs username;
               };
               modules = [
-                dankMaterialShell.homeModules.dankMaterialShell.default
+                dank-material-shell.homeModules.dank-material-shell
                 hyprland.homeManagerModules.default
                 self.homeManagerModules.default
                 ./users/.shared
@@ -163,7 +163,7 @@ rec {
           };
           modules = [
             hyprland.nixosModules.default
-            dankMaterialShell.nixosModules.greeter
+            dank-material-shell.nixosModules.greeter
             nur.modules.nixos.default
             home-manager.nixosModules.home-manager
             aagl.nixosModules.default
