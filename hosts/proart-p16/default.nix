@@ -81,7 +81,7 @@
   services.displayManager.gdm.enable = false;
   programs.dank-material-shell.greeter = {
     enable = true;
-    compositor.name = "hyprland";
+    compositor.name = "niri";
   };
 
   modules.gnome.enable = false;

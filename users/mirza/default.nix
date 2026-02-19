@@ -36,6 +36,14 @@ let
   );
 in
 {
+  imports = [
+    inputs.niri.homeModules.niri
+    inputs.danksearch.homeModules.dsearch
+    inputs.dms-plugin-registry.modules.default
+    inputs.dank-material-shell.homeModules.niri
+  ];
+
+  programs.home-manager.enable = true;
   programs.zsh.enable = true;
   programs.git = {
     enable = true;
@@ -60,13 +68,15 @@ in
 
   modules.giantswarm.enable = true;
   modules.hyprland.enable = true;
+  programs.dsearch.enable = true;
   programs.dank-material-shell = {
     enable = true;
-
-    plugins = with pkgs.dms-plugins; {
-      power-usage.enable = true;
-      power-usage.src = power-usage;
+    systemd = {
+      enable = true; # Systemd service for auto-start
+      restartIfChanged = true; # Auto-restart dms.service when dank-material-shell changes
     };
+    niri.enableKeybinds = false;
+    niri.includes.enable = false;
   };
 
   programs.obsidian = {
@@ -168,6 +178,8 @@ in
   };
 
   home.packages = with pkgs; [
+    xwayland-satellite
+
     wget
     curl
 
@@ -215,14 +227,6 @@ in
     slack
   ];
 
-  wayland.windowManager.hyprland.extraConfig = ''
-    source=hyprland/general.conf
-    source=hyprland/env.conf
-    source=hyprland/execs.conf
-    source=hyprland/keybinds.conf
-    source=hyprland/rules.conf
-    source=hyprland/permissions.conf
-  ''; # The actual configs are here, which is a mutable symlink to allow live changes
   xdg.configFile = XDGConfigMutableSymlinksRecursive; # All config files will be writable
   home.file.".vscode/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
   home.file.".vscode-insiders/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
