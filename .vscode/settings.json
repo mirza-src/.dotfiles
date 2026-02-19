@@ -18,8 +18,17 @@
   "vs-kubernetes": {
     "vs-kubernetes.crd-code-completion": "enabled"
   },
-  "containers.containerClient": "com.microsoft.visualstudio.containers.podman",
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": true,
+    "markdown": true,
+    "scminput": true
+  },
   "redhat.telemetry.enabled": false,
+  "svelte.enable-ts-plugin": true,
+  "gitlens.ai.model": "vscode",
+  "gitlens.ai.vscode.model": "copilot:gpt-4.1",
+  "chat.viewSessions.orientation": "stacked",
   "typescript.updateImportsOnFileMove.enabled": "always",
   "nix.enableLanguageServer": true,
   "nix.serverPath": "nixd",
@@ -47,5 +56,14 @@
   },
   "[go]": {
     "editor.defaultFormatter": "golang.go"
+  },
+  "[c]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools"
+  },
+  "[terraform]": {
+    "editor.defaultFormatter": "hashicorp.terraform"
+  },
+  "[java]": {
+    "editor.defaultFormatter": "redhat.java"
   }
 }
