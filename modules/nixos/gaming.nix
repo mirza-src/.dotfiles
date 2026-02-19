@@ -24,6 +24,7 @@ in
       enable = true;
       capSysNice = true;
     };
+    # programs.lutris.enable = true;
     programs.steam = {
       enable = true;
       package = pkgs.steam.override {
@@ -33,8 +34,18 @@ in
             mangohud
           ];
       };
+
       platformOptimizations.enable = true;
       gamescopeSession.enable = true;
+      gamescopeSession.args = [
+        "--adaptive-sync" # VRR support
+        "--hdr-enabled" # HDR support
+        "--mangoapp" # performance overlay
+        "--rt" # Use realtime scheduling
+        # Integrated GPU
+        # "--prefer-vk-device"
+        # "1002:150e"
+      ];
       remotePlay.openFirewall = true; # Open ports in the firewall for Steam Remote Play
       dedicatedServer.openFirewall = true; # Open ports in the firewall for Source Dedicated Server
       localNetworkGameTransfers.openFirewall = true; # Open ports in the firewall for Steam Local Network Game Transfers
