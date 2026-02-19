@@ -200,6 +200,11 @@ in
   home.packages = with pkgs; [
     xwayland-satellite
 
+    i2c-tools
+    wl-clipboard
+    cliphist
+    kdePackages.qtmultimedia
+
     wget
     curl
 
