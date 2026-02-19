@@ -86,27 +86,13 @@
 
   modules.gnome.enable = false;
   programs.hyprland.enable = true;
-  services.xserver.desktopManager.kodi.enable = true;
-  services.xserver.desktopManager.kodi.package = pkgs.kodi.withPackages (
-    kodiPkgs: with kodiPkgs; [
-      joystick
-      youtube
-      netflix
-      pdfreader
-      steam-library
-      steam-launcher
-      steam-controller
-      bluetooth-manager
-    ]
-  );
 
-  services.ollama = {
-    enable = true;
-  };
-
+  virtualisation.docker.enable = true;
+  networking.nftables.enable = true;
+  programs.virt-manager.enable = true;
   virtualisation.libvirtd.enable = true;
   virtualisation.incus.enable = true;
   virtualisation.incus.ui.enable = true;
-  networking.nftables.enable = true;
   networking.firewall.trustedInterfaces = [ "incusbr0" ];
+  virtualisation.spiceUSBRedirection.enable = true;
 }
