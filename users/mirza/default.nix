@@ -203,7 +203,6 @@ in
     i2c-tools
     wl-clipboard
     cliphist
-    kdePackages.qtmultimedia
 
     wget
     curl

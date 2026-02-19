@@ -29,6 +29,13 @@ in
       gcr # https://github.com/nix-community/home-manager/issues/1454#issuecomment-2781057551
       kitty
       ghostty
+      # tela-icon-theme
+      papirus-icon-theme
+      adwaita-icon-theme
+      kdePackages.breeze-icons
+      kdePackages.qtmultimedia
+      kdePackages.qtimageformats
+      kdePackages.kimageformats
       kdePackages.dolphin
       kdePackages.ark
       egl-wayland
