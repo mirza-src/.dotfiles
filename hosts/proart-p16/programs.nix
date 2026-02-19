@@ -30,9 +30,9 @@
   # $ nix search wget
   environment.systemPackages = with pkgs; [
     # Core utilities
+    git
     wget
     curl
-    inetutils
     jq
     yq
 
@@ -41,6 +41,12 @@
     lshw
     pciutils
     usbutils
+
+    # Networking tools
+    inetutils
+    nettools
+    dnsutils
+    tcpdump
 
     # Development tools
     gcc
