@@ -23,6 +23,15 @@ in
         cert-manager.helm-tool
         nancy
         go
+        tilt
+        kind
+        clusterctl
+        fluxcd
+
+        (_1password-gui.override {
+          polkitPolicyOwners = [ config.home.username ];
+        })
+        _1password-cli
       ]
       ++ (with giantswarm; [
         devctl
