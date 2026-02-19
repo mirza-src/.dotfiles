@@ -66,6 +66,11 @@ in
     agents.bitwarden = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
   };
 
+  programs.firefox.enable = true;
+  programs.firefox.package = pkgs.wrapFirefox (pkgs.firefox-unwrapped.override {
+    pipewireSupport = true;
+  }) { };
+
   modules.giantswarm.enable = true;
   modules.hyprland.enable = true;
   programs.dsearch.enable = true;
