@@ -41,10 +41,12 @@ in
     enable = true;
     signing.signByDefault = true;
     signing.format = "ssh";
-    signing.key = "~/.ssh/id_ed25519";
     settings = {
+      gpg.ssh.defaultKeyCommand = "ssh-add -L";
       user.name = "Mirza Esaaf Shuja";
       user.email = "mirzaesaaf@gmail.com";
+      core.filemode = false;
+      push.autoSetupRemote = true;
     };
   };
 
