@@ -17,9 +17,9 @@ in
   config = mkIf cfg.enable {
     wayland.windowManager.hyprland = {
       enable = true;
+      systemd.enable = false;
     };
     services.gnome-keyring.enable = true;
-    services.polkit-gnome.enable = true;
 
     home.sessionVariables = {
       HYPRSHOT_DIR = "${options.home.homeDirectory}/Pictures/Screenshots";
