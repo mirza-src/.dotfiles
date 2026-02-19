@@ -250,6 +250,9 @@ in
     vagrant
     ansible
     slack
+
+    bitwarden-desktop
+    bitwarden-cli
   ];
 
   xdg.configFile = XDGConfigMutableSymlinksRecursive; # All config files will be writable
