@@ -225,7 +225,5 @@ in
   home.file.".vscode/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
 
   modules.kubernetes.enable = true;
-  modules.podman.enable = true;
-  modules.podman.tui = true;
   modules.vpn.enable = true;
 }
