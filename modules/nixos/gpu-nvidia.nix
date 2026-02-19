@@ -20,9 +20,13 @@ in
   config = mkIf cfg.enable {
     # boot.initrd.kernelModules = [ "nvidia" ];
     services.xserver.videoDrivers = [ "nvidia" ];
+    nixpkgs.config.cudaSupport = true;
 
     environment.systemPackages = with pkgs; [
       nvitop
+      cudatoolkit
+      cudaPackages.cuda_nvcc
+      linuxPackages.nvidia_x11
     ];
 
     hardware.nvidia = {
