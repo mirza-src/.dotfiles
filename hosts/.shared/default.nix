@@ -1,6 +1,7 @@
 {
   self,
   lib,
+  pkgs,
   inputs,
   hostname,
   nixConfig,
@@ -42,8 +43,19 @@
   };
 
   services.logind.settings.Login.HandleLidSwitch = "ignore";
-  security.polkit.enable = true;
-  programs.ssh.startAgent = true;
+  services.logind.settings.Login.HandlePowerKey = "ignore";
+  services.fprintd.enable = true;
+  services.hardware.bolt.enable = true;
+  services.accounts-daemon.enable = true;
+  environment.systemPackages = with pkgs; [
+    git
+    kdiskmark
+  ];
+
+  programs.nix-ld.enable = true;
+  programs.nix-ld.libraries = with pkgs; [
+    libGL
+  ];
 
   virtualisation.vmVariant = {
     hardware.nvidia-container-toolkit.enable = lib.mkForce false;
