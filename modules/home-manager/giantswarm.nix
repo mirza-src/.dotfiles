@@ -34,5 +34,7 @@ in
         nancy-fixer
       ])
     );
+
+    programs.ssh-agent-switch.agents."1password" = "${config.home.homeDirectory}/.1password/agent.sock";
   };
 }

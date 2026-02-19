@@ -48,6 +48,14 @@ in
     };
   };
 
+  services.ssh-agent.enable = true;
+  programs.ssh-agent-switch = {
+    enable = true;
+    defaultAgent = "bitwarden";
+    agents.local = "$XDG_RUNTIME_DIR/${config.services.ssh-agent.socket}";
+    agents.bitwarden = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
+  };
+
   modules.giantswarm.enable = true;
   modules.hyprland.enable = true;
   programs.dankMaterialShell = {
