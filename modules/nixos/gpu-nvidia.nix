@@ -56,7 +56,22 @@ in
       nvidiaSettings = true;
 
       # Optionally, you may need to select the appropriate driver version for your specific GPU.
-      package = config.boot.kernelPackages.nvidiaPackages.beta;
+      package =
+        # HACK: https://github.com/NixOS/nixpkgs/issues/489947
+        with config.boot.kernelPackages.nvidiaPackages;
+        (
+          latest
+          // {
+            open = latest.open.overrideAttrs (prev: {
+              patches = (prev.patches or [ ]) ++ [
+                (pkgs.fetchpatch {
+                  url = "https://raw.githubusercontent.com/CachyOS/CachyOS-PKGBUILDS/refs/heads/master/nvidia/nvidia-utils/kernel-6.19.patch";
+                  hash = "sha256-YuJjSUXE6jYSuZySYGnWSNG5sfVei7vvxDcHx3K+IN4=";
+                })
+              ];
+            });
+          }
+        );
 
       dynamicBoost.enable = false;
     };
