@@ -16,7 +16,7 @@ in
   config = mkIf cfg.enable {
     services.lact.enable = true;
     environment.systemPackages = with pkgs; [
-      # nvtopPackages.full # TODO: cuda12.8-cuda_cuobjdump-12.8.90 is broken
+      nvtopPackages.full
     ];
     hardware.graphics = {
       enable = true;
