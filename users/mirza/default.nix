@@ -156,7 +156,6 @@ in
         github.copilot
         github.vscode-github-actions
         eamodio.gitlens
-        visualstudioexptteam.vscodeintellicode
         gruntfuggly.todo-tree
         usernamehw.errorlens
         esbenp.prettier-vscode
@@ -168,12 +167,23 @@ in
         bradlc.vscode-tailwindcss
         ms-kubernetes-tools.vscode-kubernetes-tools
         tamasfe.even-better-toml
+
+        # C/C++
+        ms-vscode.makefile-tools
+        ms-vscode.cpptools-extension-pack
+        ms-vscode.cmake-tools
+        ms-vscode.cpptools
+        ms-vscode.cpptools-themes
+
+        # Java
+        vscjava.vscode-java-pack
         redhat.java
         vscjava.vscode-maven
         vscjava.vscode-gradle
         vscjava.vscode-java-test
         vscjava.vscode-java-debug
         vscjava.vscode-java-dependency
+
         haskell.haskell
         justusadam.language-haskell
         tomoki1207.pdf
@@ -182,6 +192,8 @@ in
         ms-vscode.wordcount
         theqtcompany.qt-core
         theqtcompany.qt-qml
+
+        svelte.svelte-vscode
       ]);
   };
 
