@@ -126,6 +126,9 @@ in
       target = "Documents/tinkering";
     };
   };
+  home.activation.createObsidianDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run mkdir -p ${config.xdg.configHome}/obsidian
+  '';
 
   programs.vscode = {
     enable = true;
