@@ -51,5 +51,20 @@
         "libvirt"
       ];
     };
+
+    maira = {
+      isNormalUser = true;
+      description = "Maira Tariq";
+      autoSubUidGidRange = true;
+      initialPassword = "password"; # Change this on first login
+      extraGroups = [
+        "networkmanager"
+        "docker"
+        "podman"
+        "input"
+        "audio"
+        "video"
+      ];
+    };
   };
 }
