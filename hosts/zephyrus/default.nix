@@ -76,6 +76,19 @@
   networking.firewall.trustedInterfaces = [ "incusbr0" ];
   virtualisation.spiceUSBRedirection.enable = true;
 
+  services.openssh = {
+    enable = true;
+    ports = [ 22 ];
+    settings = {
+      PasswordAuthentication = true;
+      UseDns = true;
+      X11Forwarding = true;
+      PermitRootLogin = "yes";
+    };
+  };
+  networking.firewall.allowedTCPPorts = [ 22 ];
+  networking.firewall.allowedUDPPorts = [ 22 ];
+
   networking.wg-quick.interfaces.hs-fulda = {
     autostart = false;
     address = [
