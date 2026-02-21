@@ -67,6 +67,12 @@ rec {
       url = "github:microvm-nix/microvm.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # HACK: To allow pure evaluation
+    devenv-root = {
+      url = "file+file:///dev/null";
+      flake = false;
+    };
   };
 
   nixConfig = {
@@ -124,9 +130,10 @@ rec {
         };
 
         # packagesFromDirectoryRecursive includes functions like callPackage
-        localPackages = nixpkgs.lib.filterAttrsRecursive (_: pkg: nixpkgs.lib.isDerivation pkg) (
-          self.overlays.default pkgs pkgs
-        );
+        localPackages = nixpkgs.lib.packagesFromDirectoryRecursive {
+          inherit (pkgs) callPackage newScope;
+          directory = ./pkgs;
+        };
       in
       {
         # Only direct derivations should be exposed through 'packages'
@@ -156,15 +163,20 @@ rec {
         devShells.default = devenv.lib.mkShell {
           inherit inputs pkgs;
           modules = [
-            (
-              { config, pkgs, ... }:
-              {
-                name = "dotfiles";
+            {
+              # HACK: To allow pure evaluation
+              devenv.root =
+                let
+                  devenvRootFileContent = builtins.readFile inputs.devenv-root.outPath;
+                in
+                pkgs.lib.mkIf (devenvRootFileContent != "") devenvRootFileContent;
+            }
+            {
+              name = "dotfiles";
 
-                # https://devenv.sh/reference/options/
-                packages = with pkgs; [ ];
-              }
-            )
+              # https://devenv.sh/reference/options/
+              # packages = with pkgs; [ ];
+            }
           ];
         };
       }
@@ -213,6 +225,7 @@ rec {
       templates =
         nixpkgs.lib.genAttrs (self.lib.listNixModules ./templates) (template: {
           path = ./templates/${template};
+          description = "Template for ${template}";
         })
         // {
           default = self.templates.devenv;

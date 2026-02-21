@@ -246,6 +246,18 @@
         "type": "github"
       }
     },
+    "devenv-root": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-d6xi4mKdjkX2JFicDIv5niSzpyI0m/Hnm8GGAIU04kY=",
+        "type": "file",
+        "url": "file:///dev/null"
+      },
+      "original": {
+        "type": "file",
+        "url": "file:///dev/null"
+      }
+    },
     "dms-plugin-registry": {
       "inputs": {
         "nixpkgs": [
@@ -1301,6 +1313,7 @@
         "dank-material-shell": "dank-material-shell",
         "danksearch": "danksearch",
         "devenv": "devenv",
+        "devenv-root": "devenv-root",
         "dms-plugin-registry": "dms-plugin-registry",
         "flake-utils": "flake-utils",
         "home-manager": "home-manager",
