@@ -111,4 +111,28 @@
       }
     ];
   };
+
+  programs.sway.enable = true;
+  services.sunshine = {
+    enable = true;
+    autoStart = true;
+    capSysAdmin = true;
+    openFirewall = true;
+    package = pkgs.sunshine.override {
+      cudaSupport = true;
+      cudaPackages = pkgs.cudaPackages;
+    };
+    settings = {
+      global_prep_cmd = builtins.toJSON [
+        {
+          do = "sh -c \"SWAYSOCK=$XDG_RUNTIME_DIR/${config.services.sway-headless.socket} swaymsg output HEADLESS-1 mode \${SUNSHINE_CLIENT_WIDTH}x\${SUNSHINE_CLIENT_HEIGHT}@\${SUNSHINE_CLIENT_FPS}Hz\"";
+          undo = "sh -c \"SWAYSOCK=$XDG_RUNTIME_DIR/${config.services.sway-headless.socket} swaymsg output HEADLESS-1 mode ${config.services.sway-headless.mode}\"";
+        }
+      ];
+    };
+  };
+  services.sway-headless.enable = true;
+  services.sway-headless.autoStart = true;
+  systemd.user.services.sunshine.environment.WAYLAND_DISPLAY =
+    config.services.sway-headless.wayland-display;
 }
