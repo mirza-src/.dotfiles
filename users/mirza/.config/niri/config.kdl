@@ -5,6 +5,13 @@
 config-notification {
     disable-failed
 }
+// Outputs from existing configuration
+/-output "eDP-2" {
+    mode "2560x1600@239.998993"
+    position x=2560 y=0
+    variable-refresh-rate
+}
+
 
 gestures {
     hot-corners {
@@ -83,11 +90,7 @@ input {
 // Find more information on the wiki:
 // https://github.com/YaLTeR/niri/wiki/Configuration:-Outputs
 // Remember to uncomment the node by removing "/-"!
-/-output "eDP-2" {
-    mode "2560x1600@239.998993"
-    position x=2560 y=0
-    variable-refresh-rate
-}
+
 // Settings that influence how windows are positioned and sized.
 // Find more information on the wiki:
 // https://github.com/YaLTeR/niri/wiki/Configuration:-Layout
@@ -224,6 +227,7 @@ window-rule {
     open-floating false
 }
 window-rule {
+    match app-id=r#"^org\.gnome\.Calculator$"#
     match app-id=r#"^gnome-calculator$"#
     match app-id=r#"^galculator$"#
     match app-id=r#"^blueman-manager$"#
@@ -252,6 +256,7 @@ window-rule {
 // Open dms windows as floating by default
 window-rule {
     match app-id=r#"org.quickshell$"#
+    match app-id=r#"com.danklinux.dms$"#
     open-floating true
 }
 debug {
@@ -277,5 +282,6 @@ include "dms/outputs.kdl"
 include "dms/cursor.kdl"
 
 // Include overrides
-include "overrides/workspaces.kdl"
 include "overrides/binds.kdl"
+include "overrides/outputs.kdl"
+include "overrides/workspaces.kdl"

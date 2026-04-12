@@ -1,0 +1,22 @@
+
+debug {
+    // Use integrated GPU /dev/dri/by-path/pci-0000:65:00.0-render
+    // render-drm-device "/dev/dri/renderD128"
+    // ignore-drm-device "/dev/dri/renderD129"
+
+    // Use dedicated GPU /dev/dri/by-path/pci-0000:64:00.0-render
+    render-drm-device "/dev/dri/renderD129"
+    // ignore-drm-device "/dev/dri/renderD128"
+}
+
+output "eDP-1" {
+    mode "2880x1800@120.000"
+    scale 1.75
+    position x=0 y=0
+}
+
+output "TCL Corporation Beyond TV 0x00010000" {
+    mode "3840x2160@119.880"
+    scale 2
+    position x=0 y=-1080
+}
