@@ -22,7 +22,7 @@ in
       with pkgs;
       [
         eduvpn-client
-        protonvpn-gui
+        proton-vpn
         openconnect
         wireguard-tools
       ]

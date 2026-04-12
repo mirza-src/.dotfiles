@@ -32,10 +32,7 @@ in
     environment.systemPackages = with pkgs; [
       linux-firmware
     ];
-    services.asusd = {
-      enable = true;
-      enableUserService = true;
-    };
+    services.asusd.enable = true;
     programs.rog-control-center.enable = true;
     services.asus-dialpad-driver.enable = false;
   };
