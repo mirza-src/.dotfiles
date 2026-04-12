@@ -5,16 +5,16 @@
 }:
 buildGoModule (finalAttrs: {
   pname = "kubectl-gs";
-  version = "4.8.1";
+  version = "5.3.1";
 
   src = fetchFromGitHub {
     owner = "giantswarm";
     repo = finalAttrs.pname;
     rev = "v${finalAttrs.version}";
-    hash = "sha256-YtlqmM6dSKI3QIW7cE0wwoDY1L5ciNqyHUwpoUFJgJQ=";
+    hash = "sha256-Wu9ybRA3Iusl+sOGdrCgJhmIppUAlw9ipWQ67Zn46Jc=";
   };
 
-  vendorHash = "sha256-OY8Khe9nCLukpLluZXCuTPdynUc3bN9ig5Zm9qJ9tfk=";
+  vendorHash = "sha256-ksmGQe914+zacYgFWnxTCBRpM8nG2GGRW1tXJrxsyjE=";
 
   # TODO: Some tests failing in sandboxed environment
   doCheck = false;
