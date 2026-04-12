@@ -84,6 +84,29 @@ in
     niri.includes.enable = false;
   };
 
+  xdg.portal = {
+    enable = true;
+    config = {
+      common = {
+        default = [
+          "gtk"
+          "gnome"
+        ];
+      };
+      niri = {
+        default = [
+          "gtk"
+          "gnome"
+        ];
+      };
+    };
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-gtk
+      xdg-desktop-portal-gnome
+    ];
+    xdgOpenUsePortal = true;
+  };
+
   programs.obsidian = {
     enable = true;
     defaultSettings.corePlugins = [
