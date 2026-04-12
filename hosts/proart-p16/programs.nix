@@ -14,6 +14,7 @@
   programs.git.lfs.enablePureSSHTransfer = true;
   programs.git-worktree-switcher.enable = true;
   programs.vim.enable = true;
+  services.avahi.enable = true;
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget

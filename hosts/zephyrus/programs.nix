@@ -11,6 +11,7 @@
 
   programs.git.enable = true;
   programs.vim.enable = true;
+  services.avahi.enable = true;
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
