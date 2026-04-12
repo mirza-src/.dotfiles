@@ -82,6 +82,9 @@ in
     };
     niri.enableKeybinds = false;
     niri.includes.enable = false;
+    plugins = {
+      dankBatteryAlerts.enable = true;
+    };
   };
 
   xdg.portal = {
@@ -217,6 +220,8 @@ in
         theqtcompany.qt-qml
 
         svelte.svelte-vscode
+
+        google.selinux-policy-languages
       ]);
   };
 
@@ -242,7 +247,6 @@ in
     heroic
     lutris
     mongodb-compass
-    proton-pass
     drawio
     mailspring
     rocketchat-desktop
