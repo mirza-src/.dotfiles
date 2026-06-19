@@ -25,7 +25,6 @@ in
       nvitop
       cudatoolkit
       cudaPackages.cuda_nvcc
-      linuxPackages.nvidia_x11
     ];
 
     hardware.nvidia = {
