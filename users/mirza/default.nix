@@ -44,6 +44,7 @@ in
   ];
 
   programs.home-manager.enable = true;
+  programs.claude-code.enable = true;
   programs.zsh.enable = true;
   programs.git = {
     enable = true;
