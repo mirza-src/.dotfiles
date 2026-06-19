@@ -63,6 +63,15 @@ in
       extraPackages = with pkgs; [ nvidia-vaapi-driver ];
     };
 
-    hardware.nvidia-container-toolkit.enable = true;
+    hardware.nvidia.primeBatterySaverSpecialisation = true;
+    hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
+    specialisation = lib.mkIf config.hardware.nvidia.primeBatterySaverSpecialisation {
+      battery-saver.configuration = {
+        hardware.nvidia-container-toolkit.enable = lib.mkForce false;
+      };
+    };
+    virtualisation.vmVariant = {
+      hardware.nvidia-container-toolkit.enable = false;
+    };
   };
 }
