@@ -168,19 +168,18 @@ in
       ]
     );
 
-    profiles.default.extensions =
-      # NOTE: Latest version of these extensions are not compatible with the vscode available in nixpkgs
-      (with pkgs.vscode-extensions; [
+    profiles.default.extensions = (
+      with pkgs.nix-vscode-extensions.vscode-marketplace;
+      [
         github.copilot-chat
-      ])
-      ++ (with pkgs.nix-vscode-extensions.vscode-marketplace; [
+        anthropic.claude-code
+
         ms-azuretools.vscode-containers
         ms-vscode.vscode-speech
         ms-vscode-remote.remote-containers
         jnoortheen.nix-ide
         christian-kohler.path-intellisense
         mkhl.direnv
-        github.copilot
         github.vscode-github-actions
         eamodio.gitlens
         gruntfuggly.todo-tree
@@ -223,7 +222,8 @@ in
         svelte.svelte-vscode
 
         google.selinux-policy-languages
-      ]);
+      ]
+    );
   };
 
   home.packages = with pkgs; [
