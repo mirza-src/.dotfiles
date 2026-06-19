@@ -39,11 +39,14 @@
   boot.supportedFilesystems = [ "ntfs" ];
   programs.starship = {
     enable = lib.mkDefault true;
-    settings = builtins.fromTOML (builtins.readFile ../.shared/.config/starship.toml);
+    settings = fromTOML (builtins.readFile ../.shared/.config/starship.toml);
   };
 
-  services.logind.settings.Login.HandleLidSwitch = "ignore";
-  services.logind.settings.Login.HandlePowerKey = "ignore";
+  services.logind.settings.Login = {
+    HandlePowerKey = "hibernate";
+    HandleSuspendKey = "sleep";
+    HandleLidSwitch = "ignore";
+  };
   services.fprintd.enable = true;
   services.hardware.bolt.enable = true;
   services.accounts-daemon.enable = true;
@@ -56,8 +59,4 @@
   programs.nix-ld.libraries = with pkgs; [
     libGL
   ];
-
-  virtualisation.vmVariant = {
-    hardware.nvidia-container-toolkit.enable = lib.mkForce false;
-  };
 }
