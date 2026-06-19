@@ -24,6 +24,7 @@ in
       helmfile
       kubetail
       lens
+      kubectl-tree
     ];
     programs.k9s.enable = true;
     programs.kubecolor.enable = true;
