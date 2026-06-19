@@ -15,7 +15,7 @@
 
       // Use integrated GPU /dev/dri/by-path/pci-0000:65:00.0-render
       render-drm-device "/dev/dri/renderD128"
-      ignore-drm-device "/dev/dri/renderD129"
+      // ignore-drm-device "/dev/dri/renderD129"
     }
 
     gestures {
