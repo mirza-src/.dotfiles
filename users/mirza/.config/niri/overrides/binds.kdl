@@ -1,3 +1,8 @@
+input {
+    mod-key "Super"
+    mod-key-nested "Alt"
+}
+
 binds {
     // === Numbered Workspaces ===
     Mod+1 { focus-workspace "1"; }
