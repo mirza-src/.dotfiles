@@ -24,6 +24,10 @@ in
     ];
 
     boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4;
+    boot.extraModulePackages = with config.boot.kernelPackages; [
+      ryzen-smu
+    ];
+    boot.kernelModules = [ "ryzen_smu" ];
     boot.extraModprobeConfig = ''
       options asus_wmi fnlock_default=Y
     '';
