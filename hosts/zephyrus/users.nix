@@ -52,7 +52,7 @@
         "video"
         "disk"
         "incus-admin"
-        "libvirt"
+        "libvirtd"
       ];
     };
 
