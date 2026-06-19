@@ -18,12 +18,6 @@ in
   };
 
   config = mkIf cfg.enable {
-    # Use the integrated GPU for display
-    boot.kernelParams = lib.mkAfter [
-      "nvidia-drm.fbdev=0"
-    ];
-
-    # boot.initrd.kernelModules = [ "nvidia" ];
     services.xserver.videoDrivers = [ "nvidia" ];
     nixpkgs.config.cudaSupport = true;
 
