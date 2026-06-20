@@ -28,6 +28,10 @@ in
         description = "Package providing the ghelper binary and integration files.";
       };
 
+      autoStart = lib.mkEnableOption "Automatically start G-Helper at login." // {
+        default = true;
+      };
+
       enableGpuBootService =
         lib.mkEnableOption "Enable the G-Helper GPU boot helper systemd service."
         // {
@@ -63,5 +67,15 @@ in
       environment.systemPackages = [ cfg.ghelper.package ];
       services.udev.packages = [ cfg.ghelper.package ];
       systemd.packages = lib.mkIf cfg.ghelper.enableGpuBootService [ cfg.ghelper.package ];
+      systemd.user.services.ghelper = lib.mkIf cfg.ghelper.autoStart {
+        description = "G-Helper for Linux User Service";
+        wantedBy = [ "graphical-session.target" ];
+        partOf = [ "graphical-session.target" ];
+
+        serviceConfig = {
+          ExecStart = "${pkgs.ghelper}/bin/ghelper";
+          Restart = "on-failure";
+        };
+      };
     });
 }
