@@ -109,7 +109,7 @@
 
   programs.sway.enable = true;
   services.sunshine = {
-    enable = true;
+    enable = false;
     autoStart = true;
     capSysAdmin = true;
     openFirewall = true;
@@ -126,8 +126,6 @@
       ];
     };
   };
-  services.sway-headless.enable = true;
-  services.sway-headless.autoStart = true;
   systemd.user.services.sunshine.environment.WAYLAND_DISPLAY =
     config.services.sway-headless.wayland-display;
 }
