@@ -11,6 +11,12 @@
     ./users.nix
 
     ./hardware-configuration.nix
+
+    inputs.nixos-hardware.nixosModules.common-pc-laptop-ssd
+    inputs.nixos-hardware.nixosModules.common-cpu-amd
+    inputs.nixos-hardware.nixosModules.common-cpu-amd-pstate
+    inputs.nixos-hardware.nixosModules.common-gpu-amd
+    inputs.nixos-hardware.nixosModules.common-gpu-nvidia
   ];
 
   boot.kernelParams = [ "kvm.enable_virt_at_load=0" ];
@@ -60,6 +66,9 @@
   programs.hyprland.enable = true;
   programs.uwsm.enable = true;
   programs.niri.enable = true;
+  # Use downstream niri for virtual display support
+  # Until this is merged: https://github.com/niri-wm/niri/pull/3800
+  programs.niri.package = inputs.niri-pkg.packages.${pkgs.system}.niri;
   security.polkit.enable = true;
   services.gnome.gnome-keyring.enable = false;
 

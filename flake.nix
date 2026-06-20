@@ -2,6 +2,10 @@ rec {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    nixos-hardware = {
+      url = "github:NixOS/nixos-hardware";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     home-manager = {
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -33,6 +37,10 @@ rec {
     };
     niri = {
       url = "github:sodiboo/niri-flake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    niri-pkg = {
+      url = "github:willybarret/niri/wip/virtual-outputs";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     hyprland = {
@@ -150,7 +158,6 @@ rec {
                 inherit self inputs username;
               };
               modules = [
-                dank-material-shell.homeModules.dank-material-shell
                 hyprland.homeManagerModules.default
                 self.homeManagerModules.default
                 ./users/.shared

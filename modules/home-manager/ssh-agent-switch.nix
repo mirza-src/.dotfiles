@@ -12,6 +12,8 @@ let
   agentList = lib.concatStringsSep " " agentNames;
 
   aliasName = lib.optionalString (cfg.alias != null) cfg.alias;
+
+  ssh-socket-path = "${config.home.homeDirectory}/.ssh/agent.sock";
 in
 {
   options.programs.ssh-agent-switch = {
@@ -41,7 +43,12 @@ in
 
   config = lib.mkIf cfg.enable {
     ## Single stable socket for everything
-    systemd.user.sessionVariables.SSH_AUTH_SOCK = "${config.home.homeDirectory}/.ssh/agent.sock";
+    systemd.user.sessionVariables.SSH_AUTH_SOCK = ssh-socket-path;
+    sshAuthSock.initialization = {
+      bash = lib.mkForce ''export SSH_AUTH_SOCK="${ssh-socket-path}"'';
+      fish = lib.mkForce ''set -x SSH_AUTH_SOCK "${ssh-socket-path}"'';
+      nushell = lib.mkForce ''$env.SSH_AUTH_SOCK = "${ssh-socket-path}"'';
+    };
     home.activation.createSshDirectory = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
       run mkdir -p ${config.home.homeDirectory}/.ssh
     '';

@@ -39,8 +39,9 @@ in
   imports = [
     inputs.niri.homeModules.niri
     inputs.danksearch.homeModules.dsearch
-    inputs.dms-plugin-registry.modules.default
+    inputs.dms-plugin-registry.homeModules.default
     inputs.dank-material-shell.homeModules.niri
+    inputs.dank-material-shell.homeModules.dank-material-shell
   ];
 
   programs.home-manager.enable = true;

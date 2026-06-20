@@ -12,10 +12,13 @@
   # You should not change this value, even if you update Home Manager. If you do
   # want to update the value, then make sure to first check the Home Manager
   # release notes.
-  home.stateVersion = lib.mkDefault "25.05"; # Please read the comment before changing.
+  home.stateVersion = lib.mkDefault "26.05"; # Please read the comment before changing.
 
   home.username = lib.mkDefault username;
   home.homeDirectory = lib.mkDefault "/home/${username}";
   nix.package = lib.mkDefault pkgs.nix;
   nixpkgs.config.allowUnfree = lib.mkDefault true;
+  nixpkgs.config.permittedInsecurePackages = [
+    "electron-39.8.10"
+  ];
 }
