@@ -1,40 +1,42 @@
-{ ... }:
+{ lib, config, ... }:
 {
   programs.dank-material-shell.greeter.configHome = "/home/mirza";
-  programs.dank-material-shell.greeter.compositor.customConfig = ''
-    hotkey-overlay {
-      skip-at-startup
-    }
+  programs.dank-material-shell.greeter.compositor.customConfig =
+    lib.mkIf (config.programs.dank-material-shell.greeter.compositor.name == "niri")
+      ''
+        hotkey-overlay {
+          skip-at-startup
+        }
 
-    environment {
-      DMS_RUN_GREETER "1"
-    }
+        environment {
+          DMS_RUN_GREETER "1"
+        }
 
-    debug {
-      keep-max-bpc-unchanged
+        debug {
+          keep-max-bpc-unchanged
 
-      // Use integrated GPU /dev/dri/by-path/pci-0000:65:00.0-render
-      render-drm-device "/dev/dri/renderD128"
-      // ignore-drm-device "/dev/dri/renderD129"
-    }
+          // Use integrated GPU /dev/dri/by-path/pci-0000:65:00.0-render
+          render-drm-device "/dev/dri/renderD128"
+          // ignore-drm-device "/dev/dri/renderD129"
+        }
 
-    gestures {
-      hot-corners {
-        off
-      }
-    }
+        gestures {
+          hot-corners {
+            off
+          }
+        }
 
-    layout {
-      background-color "#000000"
-    }
+        layout {
+          background-color "#000000"
+        }
 
-    input {
-      touchpad {
-        tap
-        natural-scroll
-      }
-    }
-  '';
+        input {
+          touchpad {
+            tap
+            natural-scroll
+          }
+        }
+      '';
 
   users.users = {
     mirza = {
