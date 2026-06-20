@@ -39,12 +39,9 @@
   modules.gpu.enable = true;
   modules.gpu-amd.enable = true;
   modules.gpu-nvidia.enable = true;
-  hardware.nvidia.prime.amdgpuBusId = "PCI:101:0:0";
-  # hardware.nvidia.prime.nvidiaBusId = "PCI:100:0:0";
-  modules.nvidia-prime.enable = false;
-  # modules.nvidia-prime.nvidiaBusId = "PCI:100:0:0";
-  # modules.nvidia-prime.amdBusId = "PCI:101:0:0";
-  # hardware.nvidia.primeBatterySaverSpecialisation = true;
+  modules.nvidia-prime.enable = true;
+  modules.nvidia-prime.amdBusId = "PCI:101:0:0";
+  modules.nvidia-prime.nvidiaBusId = "PCI:100:0:0";
   modules.gaming.enable = true;
   modules.power.enable = true;
   services.system76-scheduler.enable = true;
