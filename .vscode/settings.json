@@ -1,6 +1,7 @@
 {
   "extensions.autoUpdate": false,
   "extensions.autoCheckUpdates": false,
+  "terminal.integrated.gpuAcceleration": "off",
 
   "git.autofetch": true,
   "git.confirmSync": false,
