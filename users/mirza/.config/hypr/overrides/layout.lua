@@ -1,0 +1,11 @@
+hl.config({
+    debug = {
+        disable_logs = false,
+    },
+    general = {
+        layout = "scrolling",
+    },
+    scrolling = {
+        column_width = 1.0
+    }
+})
