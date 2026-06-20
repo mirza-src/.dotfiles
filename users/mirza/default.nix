@@ -245,8 +245,6 @@ in
     veracrypt
     vlc
     protonplus
-    heroic
-    lutris
     mongodb-compass
     drawio
     mailspring
