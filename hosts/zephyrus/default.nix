@@ -44,8 +44,6 @@
   modules.nvidia-prime.nvidiaBusId = "PCI:100:0:0";
   modules.gaming.enable = true;
   modules.power.enable = true;
-  services.system76-scheduler.enable = true;
-  services.system76-scheduler.useStockConfig = true;
 
   modules.silent-boot.enable = true;
   # modules.secure-boot.enable = true;
