@@ -283,7 +283,6 @@ in
   xdg.configFile = XDGConfigMutableSymlinksRecursive; # All config files will be writable
   home.file.".vscode/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
   home.file.".vscode-insiders/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
-  home.shellAliases.code = "code-insiders";
 
   modules.kubernetes.enable = true;
   modules.vpn.enable = true;
