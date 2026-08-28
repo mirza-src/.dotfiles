@@ -18,7 +18,6 @@
     inputs.nixos-hardware.nixosModules.common-gpu-amd
     inputs.nixos-hardware.nixosModules.common-gpu-nvidia
 
-    inputs.hyprland.nixosModules.default
     inputs.mangowm.nixosModules.mango
     inputs.dank-greeter.nixosModules.default
   ];
@@ -61,21 +60,27 @@
   boot.loader.efi.canTouchEfiVariables = true;
 
   services.xserver.enable = true;
-  services.displayManager.dms-greeter = {
-    enable = true;
-    compositor.name = "niri";
-  };
-
-  programs.uwsm.enable = true;
-  programs.hyprland.enable = true;
   programs.mango.enable = true;
-  programs.niri.enable = true;
-  # Use downstream niri for virtual display support
-  # Until this is merged: https://github.com/niri-wm/niri/pull/3800
-  # NOTE: Upstream pkg is broken for now
-  # programs.niri.package = inputs.niri-pkg.packages.${pkgs.system}.niri;
+  programs.dms-greeter = {
+    enable = true;
+    compositor.name = "mango";
+  };
+  environment.sessionVariables = {
+    UWSM_SILENT_START = "1";
+  };
+  programs.uwsm = {
+    enable = true;
+    waylandCompositors = {
+      mango = {
+        prettyName = "Mango";
+        comment = "Mango Compositor managed by UWSM";
+        binPath = "${pkgs.mango}/bin/mango";
+      };
+    };
+  };
   security.polkit.enable = true;
-  services.gnome.gnome-keyring.enable = false;
+  security.pam.services.login.enableGnomeKeyring = true;
+  security.pam.services.greetd.enableGnomeKeyring = true;
 
   virtualisation.docker.enable = true;
   networking.nftables.enable = true;
@@ -122,7 +127,7 @@
     ];
   };
 
-  programs.sway.enable = true;
+  services.sway-headless.enable = true;
   services.sunshine = {
     enable = false;
     autoStart = true;

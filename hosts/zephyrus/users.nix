@@ -1,41 +1,13 @@
 { lib, config, ... }:
 {
-  services.displayManager.dms-greeter.configHome = "/home/mirza";
-  services.displayManager.dms-greeter.compositor.customConfig =
-    lib.mkIf (config.services.displayManager.dms-greeter.compositor.name == "niri")
+  programs.dms-greeter.configHome = "/home/mirza";
+  programs.dms-greeter.compositor.customConfig =
+    lib.mkIf (config.programs.dms-greeter.compositor.name == "mango")
       ''
-        hotkey-overlay {
-          skip-at-startup
-        }
-
-        environment {
-          DMS_RUN_GREETER "1"
-        }
-
-        debug {
-          keep-max-bpc-unchanged
-
-          // Use integrated GPU /dev/dri/by-path/pci-0000:65:00.0-render
-          render-drm-device "/dev/dri/renderD128"
-          // ignore-drm-device "/dev/dri/renderD129"
-        }
-
-        gestures {
-          hot-corners {
-            off
-          }
-        }
-
-        layout {
-          background-color "#000000"
-        }
-
-        input {
-          touchpad {
-            tap
-            natural-scroll
-          }
-        }
+        cursor_size=24
+        cursor_theme=Adwaita
+        trackpad_natural_scrolling=1
+        monitorrule=name:^eDP-1$,width:2880,height:1800,refresh:60,x:0,y:0,scale:2,rr:0,vrr:0
       '';
 
   users.users = {

@@ -46,5 +46,8 @@
     cryptsetup
     dislocker
     gparted
+
+    adwaita-icon-theme
+    bitwarden-desktop
   ];
 }

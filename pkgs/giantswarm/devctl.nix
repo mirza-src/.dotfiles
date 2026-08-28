@@ -11,7 +11,7 @@ buildGoModule (finalAttrs: {
   src = fetchgit {
     url = "https://github.com/giantswarm/${finalAttrs.pname}";
     rev = "v${finalAttrs.version}";
-    sha256 = "sha256-tgJULyZUQRn80jXzowD9ilK98SjWm/AznodNldp0Hxo=";
+    sha256 = "sha256-GIINRb6Eo7CUzENE7lBZ7tyYtdsjXMUY+oxjwqLdLLc=";
     leaveDotGit = true; # Generate script uses git history
   };
 

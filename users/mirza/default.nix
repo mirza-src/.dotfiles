@@ -27,7 +27,7 @@ let
       [ path ];
 
   XDGConfigMutableSymlinksRecursive = builtins.listToAttrs (
-    builtins.map (file: {
+    map (file: {
       name = lib.removePrefix (toString ./.) (toString file);
       value = {
         source = mkMutableSymlink file;
@@ -37,10 +37,8 @@ let
 in
 {
   imports = [
-    inputs.niri.homeModules.niri
     inputs.danksearch.homeModules.dsearch
     inputs.dms-plugin-registry.homeModules.default
-    inputs.dank-material-shell.homeModules.niri
     inputs.dank-material-shell.homeModules.dank-material-shell
   ];
 
@@ -75,7 +73,6 @@ in
 
   modules.defaults.enable = true;
   modules.giantswarm.enable = true;
-  modules.hyprland.enable = true;
   programs.dsearch.enable = true;
   programs.dank-material-shell = {
     enable = true;
@@ -83,23 +80,22 @@ in
       enable = true; # Systemd service for auto-start
       restartIfChanged = true; # Auto-restart dms.service when dank-material-shell changes
     };
-    niri.enableKeybinds = false;
-    niri.includes.enable = false;
     plugins = {
       dankBatteryAlerts.enable = true;
     };
   };
 
+  services.gnome-keyring.enable = true;
+  services.gnome-keyring.components = [
+    "ssh"
+    "pkcs11"
+    "secrets"
+  ];
+
   xdg.portal = {
     enable = true;
     config = {
       common = {
-        default = [
-          "gtk"
-          "gnome"
-        ];
-      };
-      niri = {
         default = [
           "gtk"
           "gnome"
@@ -271,7 +267,11 @@ in
     (azure-cli.withExtensions [ azure-cli.extensions.ssh ])
     kubelogin
     postman
+    gcr
     kitty
+    ghostty
+    kdePackages.dolphin
+    kdePackages.ark
     vagrant
     ansible
     slack
