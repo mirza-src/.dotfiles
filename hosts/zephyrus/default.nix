@@ -22,7 +22,10 @@
     inputs.dank-greeter.nixosModules.default
   ];
 
-  boot.kernelParams = [ "kvm.enable_virt_at_load=0" ];
+  boot.kernelParams = [
+    "kvm.enable_virt_at_load=0"
+    "nvme_core.default_ps_max_latency_us=0"
+  ];
   services.printing.enable = true;
   services.fwupd.enable = true;
   networking.wireguard.enable = true;

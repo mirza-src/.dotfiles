@@ -10,7 +10,6 @@ in
 
   config = mkIf cfg.enable {
     boot.plymouth.enable = true;
-    boot.initrd.verbose = false;
     boot.loader.timeout = 0;
     boot.consoleLogLevel = 0;
     boot.loader.systemd-boot.consoleMode = "2";

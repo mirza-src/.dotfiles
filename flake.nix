@@ -2,16 +2,13 @@ rec {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+    cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel";
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     home-manager = {
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    cachyos-kernel = {
-      url = "github:xddxdd/nix-cachyos-kernel";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     devenv = {
@@ -68,24 +65,20 @@ rec {
 
   nixConfig = {
     extra-substituters = [
+      "https://cache.lantian.pub/lantian"
       "https://nix-community.cachix.org"
-      "https://chaotic-nyx.cachix.org/"
-      "https://nix-gaming.cachix.org"
-      "https://nixpkgs-wayland.cachix.org"
-      "https://ezkea.cachix.org"
-      "https://devenv.cachix.org"
       "https://cache.nixos-cuda.org"
-      "https://attic.xuyh0120.win/lantian"
+      "https://cache.flox.dev"
+      "https://devenv.cachix.org"
+      "https://nix-gaming.cachix.org"
     ];
     extra-trusted-public-keys = [
+      "lantian:WVGO7vsRMSEN+h7Lp7kv6SAmrkEXgUGbbXm7jMDjBuQ="
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-      "chaotic-nyx.cachix.org-1:HfnXSw4pj95iI/n17rIDy40agHj12WfF+Gqk6SonIT8="
-      "nix-gaming.cachix.org-1:nbjlureqMbRAxR1gJ/f3hxemL9svXaZF/Ees8vCUUs4="
-      "nixpkgs-wayland.cachix.org-1:3lwxaILxMRkVhehr5StQprHdEo4IrE8sRho9R9HOLYA="
-      "ezkea.cachix.org-1:ioBmUbJTZIKsHmWWXPe1FSFbeVe+afhfgqgTSNd34eI="
-      "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
       "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
-      "lantian:EeAUQ+W+6r7EtwnmYjeVwx5kOGEBpjlBfPlzGlTNvHc="
+      "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs= "
+      "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
+      "nix-gaming.cachix.org-1:nbjlureqMbRAxR1gJ/f3hxemL9svXaZF/Ees8vCUUs4="
     ];
   };
 
@@ -96,6 +89,7 @@ rec {
       flake-utils,
       home-manager,
       devenv,
+      mangowm,
       vscode-extensions,
       ...
     }@inputs:
@@ -109,6 +103,7 @@ rec {
           # Adding an overlay to allow access to all packages through nixpkgs
           overlays = [
             vscode-extensions.overlays.default
+            mangowm.overlays.default
             self.overlays.default
           ];
         };
@@ -183,7 +178,7 @@ rec {
         }
       );
 
-      overlays.default = import ./overlay.nix;
+      overlays.default = (import ./overlay.nix) inputs;
 
       lib = import ./lib {
         inherit self;

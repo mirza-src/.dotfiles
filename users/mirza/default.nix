@@ -67,9 +67,6 @@ in
   };
 
   programs.firefox.enable = true;
-  programs.firefox.package = pkgs.wrapFirefox (pkgs.firefox-unwrapped.override {
-    pipewireSupport = true;
-  }) { };
 
   modules.defaults.enable = true;
   modules.giantswarm.enable = true;
@@ -94,19 +91,12 @@ in
 
   xdg.portal = {
     enable = true;
-    config = {
-      common = {
-        default = [
-          "gtk"
-          "gnome"
-        ];
-      };
-    };
-    extraPortals = with pkgs; [
-      xdg-desktop-portal-gtk
-      xdg-desktop-portal-gnome
-    ];
     xdgOpenUsePortal = true;
+    config.common.default = "*";
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-wlr
+      xdg-desktop-portal-gtk
+    ];
   };
 
   programs.obsidian = {
@@ -264,15 +254,13 @@ in
     czkawka-full
     moodle-dl
 
-    (azure-cli.withExtensions [ azure-cli.extensions.ssh ])
     kubelogin
     postman
-    gcr
+    gcr_4
     kitty
     ghostty
     kdePackages.dolphin
     kdePackages.ark
-    vagrant
     ansible
     slack
 

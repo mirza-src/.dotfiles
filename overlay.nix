@@ -1,4 +1,4 @@
-final: prev:
+inputs: final: prev:
 let
   lib = prev.lib;
   localPackages = (
@@ -8,7 +8,16 @@ let
     }
   );
 in
-{
+(lib.mapAttrs (
+  name: pkg:
+  if lib.isAttrs pkg then
+    (prev.${name} or { }) // pkg
+  else if lib.isDerivation pkg then
+    pkg
+  else
+    prev.${name} or pkg
+) localPackages)
+// {
   vscode-insiders = (prev.vscode.override { isInsiders = true; }).overrideAttrs (oldAttrs: rec {
     pname = "vscode-insiders";
     version = "88757eaab9989a8e9f1c6254b3fcdd9ce4d8bb98";
@@ -25,12 +34,3 @@ in
     ];
   });
 }
-// (lib.mapAttrs (
-  name: pkg:
-  if lib.isAttrs pkg then
-    (prev.${name} or { }) // pkg
-  else if lib.isDerivation pkg then
-    pkg
-  else
-    prev.${name} or pkg
-) localPackages)
