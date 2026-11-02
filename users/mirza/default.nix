@@ -77,8 +77,9 @@ in
       enable = true; # Systemd service for auto-start
       restartIfChanged = true; # Auto-restart dms.service when dank-material-shell changes
     };
+    managePluginSettings = true; # writes plugin_settings.json so enabled plugins actually load
     plugins = {
-      dankBatteryAlerts.enable = true;
+      screencastPicker.enable = true;
     };
   };
 
@@ -88,16 +89,6 @@ in
     "pkcs11"
     "secrets"
   ];
-
-  xdg.portal = {
-    enable = true;
-    xdgOpenUsePortal = true;
-    config.common.default = "*";
-    extraPortals = with pkgs; [
-      xdg-desktop-portal-wlr
-      xdg-desktop-portal-gtk
-    ];
-  };
 
   programs.obsidian = {
     enable = true;

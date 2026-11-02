@@ -64,6 +64,21 @@
 
   services.xserver.enable = true;
   programs.mango.enable = true;
+  xdg.portal = {
+    xdgOpenUsePortal = true;
+    # Screen-share picker via the DMS screencastPicker plugin.
+    wlr.settings.screencast = {
+      chooser_type = "dmenu"; # only mode that offers windows as well as monitors
+      chooser_cmd = "${
+        inputs.dms-plugin-registry.packages.${pkgs.stdenv.system}.screencastPicker
+      }/bin/screencast-picker";
+    };
+  };
+  # Picker talks to DMS over IPC and grabs window thumbnails with grim.
+  systemd.user.services.xdg-desktop-portal-wlr.path = [
+    pkgs.grim
+    inputs.dank-material-shell.packages.${pkgs.stdenv.hostPlatform.system}.dms-shell
+  ];
   programs.dms-greeter = {
     enable = true;
     compositor.name = "mango";
