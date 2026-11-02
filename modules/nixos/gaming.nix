@@ -28,6 +28,7 @@ in
     # programs.lutris.enable = true;
     programs.steam = {
       enable = true;
+      extraCompatPackages = with pkgs; [ steamtinkerlaunch ];
       package = pkgs.steam.override {
         extraPkgs =
           pkgs: with pkgs; [
@@ -51,5 +52,11 @@ in
       dedicatedServer.openFirewall = true; # Open ports in the firewall for Source Dedicated Server
       localNetworkGameTransfers.openFirewall = true; # Open ports in the firewall for Steam Local Network Game Transfers
     };
+
+    environment.systemPackages = with pkgs; [
+      gamescope
+      mangohud
+      steamtinkerlaunch
+    ];
   };
 }
