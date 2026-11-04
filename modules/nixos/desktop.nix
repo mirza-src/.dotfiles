@@ -66,6 +66,10 @@ in
       enable = true;
       compositor.name = lib.mkDefault "mango";
     };
+    # mango starts mango-session.target (-> graphical-session.target) itself,
+    # so the greeter's session started the shell too. uwsm already provides
+    # graphical-session.target for logins, so mask it.
+    systemd.user.units."mango-session.target".enable = false;
 
     security.polkit.enable = true;
     security.pam.services.login.enableGnomeKeyring = true;
