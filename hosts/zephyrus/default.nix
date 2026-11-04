@@ -66,6 +66,14 @@
   # Default desktop: mango + DankMaterialShell + dms-greeter, DMS plugins and
   # their system-level backends (modules/nixos/desktop.nix).
   modules.desktop.enable = true;
+  # Face authentication (Gaze): sudo, polkit and the DMS lock screen, password
+  # stays as fallback. The RGB and IR cameras share one USB id; for the IR
+  # camera Gaze picks the mono (GREY) node of that device.
+  modules.face-auth = {
+    enable = true;
+    irCamera = "usb:3277:0060";
+    greeter = true; # dms-greeter face login + gnome-keyring unlock (run `gaze keyring` once)
+  };
 
   virtualisation.docker.enable = true;
   networking.nftables.enable = true;

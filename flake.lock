@@ -461,6 +461,26 @@
         "type": "github"
       }
     },
+    "gaze": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793623173,
+        "narHash": "sha256-e8zUU7n5vGHpICsrV0w6wdDTybLLpGXtw1tmOYTBnYM=",
+        "owner": "GunduLabs",
+        "repo": "gaze",
+        "rev": "8e58722f9757b58a0d1f37997400d6e4a0208084",
+        "type": "github"
+      },
+      "original": {
+        "owner": "GunduLabs",
+        "repo": "gaze",
+        "type": "github"
+      }
+    },
     "ghostty": {
       "flake": false,
       "locked": {
@@ -900,6 +920,7 @@
         "devenv-root": "devenv-root",
         "dms-plugin-registry": "dms-plugin-registry",
         "flake-utils": "flake-utils",
+        "gaze": "gaze",
         "giantswarm": "giantswarm",
         "home-manager": "home-manager",
         "lanzaboote": "lanzaboote",
