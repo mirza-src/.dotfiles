@@ -55,6 +55,10 @@ rec {
       url = "github:microvm-nix/microvm.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    giantswarm = {
+      url = "github:giantswarm/nix-gs";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     # HACK: To allow pure evaluation
     devenv-root = {
@@ -91,6 +95,7 @@ rec {
       devenv,
       mangowm,
       vscode-extensions,
+      giantswarm,
       ...
     }@inputs:
     flake-utils.lib.eachDefaultSystem (
@@ -102,6 +107,7 @@ rec {
           config.cudaSupport = true;
           # Adding an overlay to allow access to all packages through nixpkgs
           overlays = [
+            giantswarm.overlay
             vscode-extensions.overlays.default
             mangowm.overlays.default
             self.overlays.default

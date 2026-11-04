@@ -6,12 +6,12 @@
 }:
 buildGoModule (finalAttrs: {
   pname = "devctl";
-  version = "8.38.3";
+  version = "8.163.0";
 
   src = fetchgit {
     url = "https://github.com/giantswarm/${finalAttrs.pname}";
     rev = "v${finalAttrs.version}";
-    sha256 = "sha256-oTaz3GwmiYZ9NH95jeLfuitlT3jYQbUxDEnCrVnqXBo=";
+    sha256 = "sha256-X7k24/A5S1ZLGqPIGGxsRbBqmIXnMVTDncgMryAsM64=";
     leaveDotGit = true; # Generate script uses git history
   };
 
@@ -21,5 +21,5 @@ buildGoModule (finalAttrs: {
   '';
 
   proxyVendor = true;
-  vendorHash = "sha256-KhxvYhMhhnqIrxp5euwqEac21q2b1AO4TsmU/yFAkNw=";
+  vendorHash = "sha256-gvEWg/8742YPRIukNjQ0oEsFd6DQ07gxZVF4GBf4/6A=";
 })
