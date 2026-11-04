@@ -16,6 +16,7 @@
   modules.giantswarm.enable = true;
   modules.kubernetes.enable = true;
   modules.vpn.enable = true;
+  modules.shell.enable = true; # zsh, tmux, neovim, direnv, fzf, starship
 
   programs.home-manager.enable = true;
   programs.claude-code.enable = true;

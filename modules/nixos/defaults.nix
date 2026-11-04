@@ -1,11 +1,11 @@
+# NixOS half of the host defaults; the shared half (nix settings, overlays,
+# hostname, home-manager) is ../common/defaults.nix, which declares
+# `modules.defaults.enable`.
 {
-  self,
   lib,
   pkgs,
   config,
   inputs,
-  hostname,
-  nixConfig,
   ...
 }:
 let
@@ -16,8 +16,6 @@ in
     inputs.home-manager.nixosModules.home-manager
   ];
 
-  options.modules.defaults.enable = lib.mkEnableOption "default host settings";
-
   config = lib.mkIf cfg.enable {
     # This value determines the NixOS release from which the default
     # settings for stateful data, like file locations and database versions
@@ -27,24 +25,7 @@ in
     # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
     system.stateVersion = lib.mkDefault "25.05"; # Did you read the comment?
 
-    networking.hostName = lib.mkDefault hostname;
-    # Apply overlays to the system's pkgs.
-    nixpkgs.overlays = lib.attrValues self.overlays;
-    nixpkgs.config.allowUnfree = lib.mkDefault true;
-    nix.nixPath = [ "nixpkgs=${inputs.nixpkgs}" ];
-    nix.settings.experimental-features = [
-      "nix-command"
-      "flakes"
-    ];
-    nix.settings.trusted-users = [ "@wheel" ];
-    home-manager.useGlobalPkgs = lib.mkDefault true;
-    home-manager.useUserPackages = lib.mkDefault true;
-
     boot.supportedFilesystems = [ "ntfs" ];
-    programs.starship = {
-      enable = lib.mkDefault true;
-      settings = fromTOML (builtins.readFile ./.config/starship.toml);
-    };
 
     services.logind.settings.Login = {
       HandlePowerKey = "hibernate";
@@ -55,7 +36,6 @@ in
     services.hardware.bolt.enable = true;
     services.accounts-daemon.enable = true;
     environment.systemPackages = with pkgs; [
-      git
       ryzenadj
       kdiskmark
     ];

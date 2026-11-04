@@ -1,63 +1,24 @@
+# System side of the shell: zsh as every user's login shell. The shell setup
+# itself (oh-my-zsh, autosuggestions, tmux, neovim, direnv, fzf, starship) is
+# the home-manager module of the same name, ../home-manager/shell.nix, so it
+# is identical on macOS.
 {
   lib,
   pkgs,
   config,
   ...
 }:
-with lib;
 let
   cfg = config.modules.shell;
 in
 {
-  options.modules.shell = {
-    enable = mkEnableOption "Enable shell utilities and configurations";
-  };
+  options.modules.shell.enable = lib.mkEnableOption "zsh as the default login shell";
 
-  config = mkIf cfg.enable {
-    programs.direnv.enable = true;
-    programs.fzf.keybindings = true;
-    programs.fzf.fuzzyCompletion = true;
+  config = lib.mkIf cfg.enable {
+    # Needed system-wide for zsh to be a valid login shell.
+    programs.zsh.enable = true;
     users.defaultUserShell = pkgs.zsh;
-    programs.zsh = {
-      enable = true;
-      enableCompletion = true;
-      autosuggestions.enable = true;
-      autosuggestions.strategy = [ "match_prev_cmd" ];
-      enableBashCompletion = true;
-      enableLsColors = true;
-      syntaxHighlighting.enable = true;
-      vteIntegration = true;
-      histSize = 100000;
-      ohMyZsh.enable = true;
-      ohMyZsh.plugins = [
-        "fzf"
-      ];
-    };
-    programs.tmux = {
-      enable = true;
-      baseIndex = 1;
-      clock24 = true;
-      keyMode = "vi";
-      escapeTime = 600;
-      customPaneNavigationAndResize = true;
-      plugins = with pkgs.tmuxPlugins; [
-        sensible
-        vim-tmux-navigator
-        catppuccin
-        yank
-        better-mouse-mode
-      ];
-      extraConfig = ''
-        set-option -g default-shell ${pkgs.zsh}/bin/zsh
-      '';
-    };
-    programs.neovim = {
-      enable = true;
-      defaultEditor = true;
-      viAlias = true;
-      vimAlias = true;
-      withNodeJs = true;
-      withPython3 = true;
-    };
+    # Completions for system packages, for home-manager's zsh.
+    environment.pathsToLink = [ "/share/zsh" ];
   };
 }
