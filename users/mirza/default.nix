@@ -42,7 +42,15 @@
 
   programs.firefox.enable = true;
   programs.lapce.enable = true;
-  programs.zed-editor.enable = true;
+  programs.zed-editor = {
+    enable = true;
+    # Settings: .config/zed/settings.json (linked below, writable). Nix language
+    # server and formatter on Zed's PATH on every platform.
+    extraPackages = with pkgs; [
+      nixd
+      nixfmt
+    ];
+  };
 
   programs.obsidian = {
     enable = true;
@@ -194,6 +202,7 @@
   xdg.configFile = config.lib.dotfiles.linkDirs [
     ./.config/ghostty
     ./.config/kitty
+    ./.config/zed
   ];
   home.file.".vscode/argv.json".source = config.lib.dotfiles.mkMutableSymlink ./.vscode/argv.json;
   home.file.".vscode-insiders/argv.json".source =

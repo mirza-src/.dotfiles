@@ -1,0 +1,21 @@
+// Zed settings, shared across platforms (linked writable from the dotfiles
+// repo, so changes made in Zed land in users/mirza/.config/zed/settings.json).
+// Based on the VS Code settings in users/mirza/.config/Code/User/settings.json.
+//
+// See https://zed.dev/docs/configuring-zed, or run `zed: open default settings`.
+{
+  // ── Look ───────────────────────────────────────────────────────────────
+  "base_keymap": "VSCode",
+  "format_on_save": "on",
+  "code_actions_on_format": {
+    "source.organizeImports": true,
+  },
+  "edit_predictions": {
+    "provider": "copilot",
+  },
+  "language_models": {
+    "ollama": {
+      "api_url": "http://localhost:11434",
+    },
+  },
+}
