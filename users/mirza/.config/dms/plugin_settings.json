@@ -1,0 +1,67 @@
+{
+  "aiOverviewControl": {
+    "enabled": true,
+    "providerSelection": "claude,ollama",
+    "pillMode": "auto",
+    "pillShowNames": false
+  },
+  "bitwarden": {
+    "enabled": true
+  },
+  "cast": {
+    "enabled": true,
+    "audioTarget": "tv",
+    "pillOnlyWhileCasting": true
+  },
+  "dankChat": {
+    "enabled": true,
+    "accountPreferences": {
+      "whatsapp": {
+        "syncRead": true
+      }
+    },
+    "telegramEnabled": false
+  },
+  "dankKDEConnect": {
+    "enabled": true,
+    "selectedDeviceId": ""
+  },
+  "dankTranslate": {
+    "enabled": true
+  },
+  "developerUtilities": {
+    "enabled": true
+  },
+  "dmsAirDrop": {
+    "enabled": true,
+    "iconOnly": true
+  },
+  "dmsThemeSync": {
+    "enabled": true,
+    "folderColorBaseThemeDark": "",
+    "folderColorBaseThemeLight": "",
+    "folderColorBaseTheme": ""
+  },
+  "emojiLauncher": {
+    "enabled": true
+  },
+  "gitmojiLauncher": {
+    "enabled": true,
+    "noTrigger": true
+  },
+  "quickCapture": {
+    "enabled": true
+  },
+  "rogControl": {
+    "enabled": true,
+    "collapsed": {
+      "This laptop": false,
+      "CPU energy preference": false,
+      "NVIDIA": false
+    },
+    "chassis": "Platinum White"
+  },
+  "screencastPicker": {
+    "enabled": true
+  }
+}

@@ -18,8 +18,6 @@
     inputs.nixos-hardware.nixosModules.common-gpu-amd
     inputs.nixos-hardware.nixosModules.common-gpu-nvidia
 
-    inputs.mangowm.nixosModules.mango
-    inputs.dank-greeter.nixosModules.default
   ];
 
   boot.kernelParams = [
@@ -65,42 +63,9 @@
   boot.loader.efi.canTouchEfiVariables = true;
 
   services.xserver.enable = true;
-  programs.mango.enable = true;
-  xdg.portal = {
-    xdgOpenUsePortal = true;
-    # Screen-share picker via the DMS screencastPicker plugin.
-    wlr.settings.screencast = {
-      chooser_type = "dmenu"; # only mode that offers windows as well as monitors
-      chooser_cmd = "${
-        inputs.dms-plugin-registry.packages.${pkgs.stdenv.system}.screencastPicker
-      }/bin/screencast-picker";
-    };
-  };
-  # Picker talks to DMS over IPC and grabs window thumbnails with grim.
-  systemd.user.services.xdg-desktop-portal-wlr.path = [
-    pkgs.grim
-    inputs.dank-material-shell.packages.${pkgs.stdenv.hostPlatform.system}.dms-shell
-  ];
-  programs.dms-greeter = {
-    enable = true;
-    compositor.name = "mango";
-  };
-  environment.sessionVariables = {
-    UWSM_SILENT_START = "1";
-  };
-  programs.uwsm = {
-    enable = true;
-    waylandCompositors = {
-      mango = {
-        prettyName = "Mango";
-        comment = "Mango Compositor managed by UWSM";
-        binPath = "${pkgs.mango}/bin/mango";
-      };
-    };
-  };
-  security.polkit.enable = true;
-  security.pam.services.login.enableGnomeKeyring = true;
-  security.pam.services.greetd.enableGnomeKeyring = true;
+  # Default desktop: mango + DankMaterialShell + dms-greeter, DMS plugins and
+  # their system-level backends (modules/nixos/desktop.nix).
+  modules.desktop.enable = true;
 
   virtualisation.docker.enable = true;
   networking.nftables.enable = true;

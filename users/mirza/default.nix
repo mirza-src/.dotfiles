@@ -1,46 +1,21 @@
+# Shared home-manager config for every platform. Platform-specific bits live
+# in ./linux.nix and ./darwin.nix (each a no-op on the other platform).
+# Dotfiles live in ./.config; each layer lists the folders it links.
 {
   config,
   pkgs,
-  lib,
-  inputs,
   ...
 }:
-let
-  mkMutableSymlink =
-    path:
-    config.lib.file.mkOutOfStoreSymlink (
-      "${config.home.homeDirectory}/.dotfiles" + lib.removePrefix (toString inputs.self) (toString path)
-    );
-
-  listFilesRecursive =
-    path:
-    let
-      pathType = builtins.readFileType path;
-    in
-    if pathType == "directory" then
-      builtins.foldl' (acc: name: acc ++ listFilesRecursive (path + "/${name}")) [ ] (
-        builtins.attrNames (builtins.readDir path)
-      )
-    else if pathType == "unknown" then
-      [ ]
-    else
-      [ path ];
-
-  XDGConfigMutableSymlinksRecursive = builtins.listToAttrs (
-    map (file: {
-      name = lib.removePrefix (toString ./.) (toString file);
-      value = {
-        source = mkMutableSymlink file;
-      };
-    }) (listFilesRecursive ./.config)
-  );
-in
 {
   imports = [
-    inputs.danksearch.homeModules.dsearch
-    inputs.dms-plugin-registry.homeModules.default
-    inputs.dank-material-shell.homeModules.dank-material-shell
+    ./linux.nix
+    ./darwin.nix
   ];
+
+  modules.defaults.enable = true;
+  modules.giantswarm.enable = true;
+  modules.kubernetes.enable = true;
+  modules.vpn.enable = true;
 
   programs.home-manager.enable = true;
   programs.claude-code.enable = true;
@@ -58,37 +33,15 @@ in
     };
   };
 
-  services.ssh-agent.enable = true;
   programs.ssh-agent-switch = {
     enable = true;
     defaultAgent = "bitwarden";
-    agents.local = "$XDG_RUNTIME_DIR/${config.services.ssh-agent.socket}";
     agents.bitwarden = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
   };
 
   programs.firefox.enable = true;
-
-  modules.defaults.enable = true;
-  modules.giantswarm.enable = true;
-  programs.dsearch.enable = true;
-  programs.dank-material-shell = {
-    enable = true;
-    systemd = {
-      enable = true; # Systemd service for auto-start
-      restartIfChanged = true; # Auto-restart dms.service when dank-material-shell changes
-    };
-    managePluginSettings = true; # writes plugin_settings.json so enabled plugins actually load
-    plugins = {
-      screencastPicker.enable = true;
-    };
-  };
-
-  services.gnome-keyring.enable = true;
-  services.gnome-keyring.components = [
-    "ssh"
-    "pkcs11"
-    "secrets"
-  ];
+  programs.lapce.enable = true;
+  programs.zed-editor.enable = true;
 
   programs.obsidian = {
     enable = true;
@@ -132,20 +85,11 @@ in
       target = "Documents/tinkering";
     };
   };
-  home.activation.createObsidianDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    run mkdir -p ${config.xdg.configHome}/obsidian
-  '';
 
+  # Package: plain VS Code here; Linux swaps in the FHS build (linux.nix).
   programs.vscode = {
     enable = true;
     # mutableExtensionsDir = false;
-
-    package = pkgs.vscode.fhsWithPackages (
-      pkgs: with pkgs; [
-        stdenv.cc.cc.lib
-        libuuid
-      ]
-    );
 
     profiles.default.extensions = (
       with pkgs.nix-vscode-extensions.vscode-marketplace;
@@ -205,12 +149,6 @@ in
   };
 
   home.packages = with pkgs; [
-    xwayland-satellite
-
-    i2c-tools
-    wl-clipboard
-    cliphist
-
     wget
     curl
 
@@ -219,13 +157,14 @@ in
 
     # Graphical applications
     discord
-    libreoffice
     google-chrome
-    veracrypt
-    vlc
-    protonplus
     mailspring
-    rocketchat-desktop
+    kitty
+    slack
+    postman
+    bitwarden-desktop
+    bitwarden-cli
+    lite-xl
 
     # TODO: Move to project-specific devenv configurations
     (haskellPackages.ghcWithPackages (
@@ -245,24 +184,17 @@ in
     czkawka-full
     moodle-dl
 
+    # (azure-cli.withExtensions [ azure-cli.extensions.ssh ])
     kubelogin
-    postman
-    gcr_4
-    kitty
-    ghostty
-    kdePackages.dolphin
-    kdePackages.ark
     ansible
-    slack
-
-    bitwarden-desktop
-    bitwarden-cli
   ];
 
-  xdg.configFile = XDGConfigMutableSymlinksRecursive; # All config files will be writable
-  home.file.".vscode/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
-  home.file.".vscode-insiders/argv.json".source = mkMutableSymlink ./.vscode/argv.json;
-
-  modules.kubernetes.enable = true;
-  modules.vpn.enable = true;
+  # Cross-platform app configs from ./.config (writable symlinks into this repo).
+  xdg.configFile = config.lib.dotfiles.linkDirs [
+    ./.config/ghostty
+    ./.config/kitty
+  ];
+  home.file.".vscode/argv.json".source = config.lib.dotfiles.mkMutableSymlink ./.vscode/argv.json;
+  home.file.".vscode-insiders/argv.json".source =
+    config.lib.dotfiles.mkMutableSymlink ./.vscode/argv.json;
 }
