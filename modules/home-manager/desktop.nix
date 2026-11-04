@@ -62,9 +62,11 @@ in
         home.file.".local/bin/omdrop".source = "${pkgs.omdrop}/bin/omdrop";
         xdg.configFile."systemd/user/airdrop-receiver.service".source =
           "${pkgs.omdrop}/share/systemd/user/airdrop-receiver.service";
+        # Exit codes: 0 created, 1 already present, 2 error. Without
+        # accepting 1, every activation after the first stopped here.
         home.activation.omdropIdentity = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
           run ${pkgs.omdrop}/libexec/omdrop/omdrop-ensure-identity \
-            --name "$(cat /proc/sys/kernel/hostname)"
+            --name "$(cat /proc/sys/kernel/hostname)" || [ $? -eq 1 ]
         '';
       })
 
