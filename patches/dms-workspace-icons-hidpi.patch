@@ -1,0 +1,50 @@
+--- a/Modules/DBar/Widgets/WorkspaceSwitcher.qml	2026-11-03 15:46:27.981755292 +0100
++++ b/Modules/DBar/Widgets/WorkspaceSwitcher.qml	2026-11-03 15:46:27.991755248 +0100
+@@ -1061,6 +1061,7 @@
+                                         IconImage {
+                                             id: rowAppIcon
+                                             anchors.fill: parent
++                                            backer.sourceSize: Qt.size(Math.ceil(width * Math.max(2, Screen.devicePixelRatio)), Math.ceil(height * Math.max(2, Screen.devicePixelRatio)))
+                                             source: modelData.icon || ""
+                                             opacity: appOpacity
+                                             visible: !modelData.isQuickshell && !modelData.isSteamApp && status === Image.Ready
+@@ -1103,6 +1104,7 @@
+ 
+                                         IconImage {
+                                             anchors.fill: parent
++                                            backer.sourceSize: Qt.size(Math.ceil(width * Math.max(2, Screen.devicePixelRatio)), Math.ceil(height * Math.max(2, Screen.devicePixelRatio)))
+                                             source: modelData.icon
+                                             opacity: appOpacity
+                                             visible: modelData.isQuickshell
+@@ -1117,6 +1119,7 @@
+                                         IconImage {
+                                             id: rowSteamIcon
+                                             anchors.fill: parent
++                                            backer.sourceSize: Qt.size(Math.ceil(width * Math.max(2, Screen.devicePixelRatio)), Math.ceil(height * Math.max(2, Screen.devicePixelRatio)))
+                                             source: modelData.icon
+                                             opacity: appOpacity
+                                             visible: modelData.isSteamApp && modelData.icon
+@@ -1212,6 +1215,7 @@
+                                         IconImage {
+                                             id: colAppIcon
+                                             anchors.fill: parent
++                                            backer.sourceSize: Qt.size(Math.ceil(width * Math.max(2, Screen.devicePixelRatio)), Math.ceil(height * Math.max(2, Screen.devicePixelRatio)))
+                                             source: modelData.icon || ""
+                                             opacity: appOpacity
+                                             visible: !modelData.isQuickshell && !modelData.isSteamApp && status === Image.Ready
+@@ -1254,6 +1258,7 @@
+ 
+                                         IconImage {
+                                             anchors.fill: parent
++                                            backer.sourceSize: Qt.size(Math.ceil(width * Math.max(2, Screen.devicePixelRatio)), Math.ceil(height * Math.max(2, Screen.devicePixelRatio)))
+                                             source: modelData.icon
+                                             opacity: appOpacity
+                                             visible: modelData.isQuickshell
+@@ -1268,6 +1273,7 @@
+                                         IconImage {
+                                             id: colSteamIcon
+                                             anchors.fill: parent
++                                            backer.sourceSize: Qt.size(Math.ceil(width * Math.max(2, Screen.devicePixelRatio)), Math.ceil(height * Math.max(2, Screen.devicePixelRatio)))
+                                             source: modelData.icon
+                                             opacity: appOpacity
+                                             visible: modelData.isSteamApp && modelData.icon

@@ -1,0 +1,56 @@
+--- a/Common/settings/SettingsStore.js	2026-11-04 00:11:35.967476365 +0100
++++ b/Common/settings/SettingsStore.js	2026-11-04 00:11:35.997406112 +0100
+@@ -192,12 +192,44 @@
+     return frame === undefined ? def : frame;
+ }
+ 
++// A bar config is one object, so changing any field used to persist all of its
++// fields. Load each bar on top of the default bar and save only what differs.
++function barDefault(density, style) {
++    return densityDefault("barConfigs", density, style)[0];
++}
++
++function withBarDefaults(configs, density, style) {
++    if (!Array.isArray(configs))
++        return configs;
++    var def = barDefault(density, style);
++    return configs.map(function (config) {
++        return Object.assign(Util.cloneDef(def), config);
++    });
++}
++
++function withoutBarDefaults(configs, density, style) {
++    if (!Array.isArray(configs))
++        return configs;
++    var def = barDefault(density, style);
++    return configs.map(function (config) {
++        var out = {};
++        for (var field in config) {
++            if (field !== "id" && field in def && Util.isDefault(config[field], def[field]))
++                continue;
++            out[field] = config[field];
++        }
++        return out;
++    });
++}
++
+ function parse(root, jsonObj) {
+     jsonObj = migrateToVersion(jsonObj || {}, root.settingsConfigVersion) || jsonObj || {};
+     jsonObj.dockConfigs = DockConfig.normalize(jsonObj.dockConfigs, DensityPresets.values("dock", jsonObj.density));
+     // the dock pages configure whichever dock is selected, so an empty list leaves them blank
+     if (!jsonObj.dockConfigs.length)
+         delete jsonObj.dockConfigs;
++    if (jsonObj.barConfigs !== undefined)
++        jsonObj.barConfigs = withBarDefaults(jsonObj.barConfigs, jsonObj.density, jsonObj.interfaceStyle);
+     var SPEC = SpecModule.SPEC;
+ 
+     if (!jsonObj)
+@@ -251,6 +283,8 @@
+             value = withoutSessionBackedPluginState(value);
+         if (!setKeys.has(k) && Util.isDefault(value, densityDefault(k, root.density, root.interfaceStyle)))
+             continue;
++        if (k === "barConfigs")
++            value = withoutBarDefaults(value, root.density, root.interfaceStyle);
+         out[k] = value;
+     }
+     out.configVersion = root.settingsConfigVersion;

@@ -16,7 +16,17 @@
 let
   cfg = config.modules.desktop;
   system = pkgs.stdenv.hostPlatform.system;
-  dmsPackage = inputs.dank-material-shell.packages.${system}.dms-shell;
+  # The workspace switcher's app icons load at 1x and get upscaled on HiDPI
+  # outputs (blurry); request them at the output's DPR like the dock/launcher
+  # do. The QML is copied in postInstall, so patch the installed tree.
+  # Bar configs are also loaded over the default bar and saved sparse, so a
+  # one-widget tweak doesn't dump every bar field into settings.json.
+  dmsPackage = inputs.dank-material-shell.packages.${system}.dms-shell.overrideAttrs (old: {
+    postInstall = (old.postInstall or "") + ''
+      patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-workspace-icons-hidpi.patch}
+      patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-bar-config-defaults.patch}
+    '';
+  });
   dmsPlugins = inputs.dms-plugin-registry.packages.${system};
 
   # DMS runs Qt with the gtk3 platform theme, so any file dialog a plugin
