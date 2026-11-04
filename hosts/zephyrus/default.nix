@@ -30,6 +30,7 @@
   services.fwupd.enable = true;
   networking.wireguard.enable = true;
   networking.networkmanager.enable = true;
+  networking.networkmanager.wifi.powersave = false; # see WIFI_PWR_ON_BAT in power.nix
   networking.networkmanager.plugins = with pkgs; [
     networkmanager-openconnect
   ];

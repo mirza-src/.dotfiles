@@ -35,6 +35,10 @@ in
 
         # Disable wake-on-lan
         WOL_DISABLE = "Y";
+
+        # MT7925 power save drops/delays UDP heavily (Cast mirroring stalls
+        # with thousands of resent packets); keep it off on battery too.
+        WIFI_PWR_ON_BAT = "off";
       };
     };
 
