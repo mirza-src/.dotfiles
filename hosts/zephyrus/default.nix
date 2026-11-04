@@ -147,25 +147,45 @@
     ];
   };
 
-  services.sway-headless.enable = true;
+  # services.mango-headless.enable = true;
+  # services.mango-headless.wlr-render-device = "/dev/dri/renderD129"; # AMD GPU render node
+  systemd.user.services.mango-headless.bindsTo = [ "sunshine.service" ];
+  systemd.user.services.mango-headless.before = [ "sunshine.service" ];
+  systemd.user.services.sunshine.requires = [ "mango-headless.service" ];
+  systemd.user.services.sunshine.after = [ "mango-headless.service" ];
   services.sunshine = {
-    enable = false;
-    autoStart = true;
+    enable = true;
+    autoStart = false;
     capSysAdmin = true;
     openFirewall = true;
-    package = pkgs.sunshine.override {
-      cudaSupport = true;
-      cudaPackages = pkgs.cudaPackages;
-    };
     settings = {
-      global_prep_cmd = builtins.toJSON [
+      adapter_name = "/dev/dri/renderD129";
+      encoder = "vaapi";
+    };
+    applications = {
+      apps = [
         {
-          do = "sh -c \"SWAYSOCK=$XDG_RUNTIME_DIR/${config.services.sway-headless.socket} swaymsg output HEADLESS-1 mode \${SUNSHINE_CLIENT_WIDTH}x\${SUNSHINE_CLIENT_HEIGHT}@\${SUNSHINE_CLIENT_FPS}Hz\"";
-          undo = "sh -c \"SWAYSOCK=$XDG_RUNTIME_DIR/${config.services.sway-headless.socket} swaymsg output HEADLESS-1 mode ${config.services.sway-headless.mode}\"";
+          name = "Steam";
+          detached = [
+            "${pkgs.util-linux}/bin/setsid ${pkgs.steam}/bin/steam steam://open/bigpicture"
+          ];
+          prep-cmd = [
+            # {
+            #   do = "mmsg dispatch create_virtual_output,HEADLESS-1";
+            #   undo = "mmsg dispatch destroy_virtual_output,HEADLESS-1";
+            # }
+            # {
+            #   do = "wlr-randr --output HEADLESS-1 --cusotm-mode \${SUNSHINE_CLIENT_WIDTH}x\${SUNSHINE_CLIENT_HEIGHT}@\${SUNSHINE_CLIENT_FPS}Hz";
+            # }
+          ];
         }
       ];
     };
   };
   systemd.user.services.sunshine.environment.WAYLAND_DISPLAY =
-    config.services.sway-headless.wayland-display;
+    config.services.mango-headless.wayland-display;
+  systemd.user.services.sunshine.environment.MANGO_INSTANCE_SIGNATURE =
+    config.services.mango-headless.socket;
+  systemd.user.services.sunshine.environment.XDG_SESSION_TYPE = "wayland";
+  systemd.user.services.sunshine.environment.XDG_CURRENT_DESKTOP = "mango";
 }
