@@ -21,11 +21,11 @@ in
     home.packages =
       with pkgs;
       [
-        eduvpn-client
         proton-vpn
         openconnect
         wireguard-tools
       ]
+      ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ eduvpn-client ]
       ++ (lib.optionals (cfg.networkmanager.enable) [
         networkmanager-openconnect
       ]);

@@ -104,7 +104,7 @@ rec {
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
-          config.cudaSupport = true;
+          config.cudaSupport = nixpkgs.lib.hasSuffix "-linux" system; # no CUDA on macOS
           # Adding an overlay to allow access to all packages through nixpkgs
           overlays = [
             giantswarm.overlay

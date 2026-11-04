@@ -42,8 +42,11 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    ## Single stable socket for everything
-    systemd.user.sessionVariables.SSH_AUTH_SOCK = ssh-socket-path;
+    ## Single stable socket for everything (systemd: Linux only; the shell
+    ## initialization below covers macOS)
+    systemd.user.sessionVariables = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
+      SSH_AUTH_SOCK = ssh-socket-path;
+    };
     sshAuthSock.initialization = {
       bash = lib.mkForce ''export SSH_AUTH_SOCK="${ssh-socket-path}"'';
       fish = lib.mkForce ''set -x SSH_AUTH_SOCK "${ssh-socket-path}"'';
