@@ -104,23 +104,6 @@ in
 
     services.open-webui = {
       enable = true;
-      # HACK: open-webui still uses the mcp 1.x API (`streamablehttp_client`),
-      # which was removed in mcp 2.x; pin it to nixpkgs' mcp_1.
-      package = pkgs.open-webui.override {
-        python3Packages = pkgs.python3Packages.overrideScope (
-          _: prev: {
-            mcp = prev.mcp_1;
-            chromadb = prev.chromadb.override {
-              posthog = prev.posthog.overridePythonAttrs (old: {
-                meta = old.meta // {
-                  broken = false;
-                };
-                doCheck = false;
-              });
-            };
-          }
-        );
-      };
       port = cfg.webuiPort;
       environment = {
         OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
@@ -148,7 +131,11 @@ in
     environment.systemPackages = with pkgs; [
       git
       lmstudio
-      opencode
+      (opencode.overrideAttrs (old: {
+        node_modules = old.node_modules.overrideAttrs {
+          outputHash = "sha256-prx9dX7kUvs/E3zopkaPk5LXh3xJAy5sZeum/W8L7cA=";
+        };
+      }))
     ];
 
     environment.etc."opencode/opencode.json".text = builtins.toJSON {

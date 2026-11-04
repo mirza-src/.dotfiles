@@ -133,15 +133,6 @@
         ms-vscode.cpptools
         ms-vscode.cpptools-themes
 
-        # Java
-        vscjava.vscode-java-pack
-        redhat.java
-        vscjava.vscode-maven
-        vscjava.vscode-gradle
-        vscjava.vscode-java-test
-        vscjava.vscode-java-debug
-        vscjava.vscode-java-dependency
-
         haskell.haskell
         tomoki1207.pdf
         hashicorp.hcl

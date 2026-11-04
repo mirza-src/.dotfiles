@@ -39,15 +39,7 @@ in
         (_1password-gui.override {
           polkitPolicyOwners = [ config.home.username ];
         })
-        (devctl.overrideAttrs (finalAttrs: {
-          version = "8.163.0";
-          src = pkgs.fetchFromGitHub {
-            owner = "giantswarm";
-            repo = finalAttrs.pname;
-            rev = "v${finalAttrs.version}";
-            hash = "sha256-52L1M+bQ8d93dpmafTCLDYOQ+JeOMjnHoB9aKYJGu08=";
-          };
-        }))
+        devctl
       ]
       ++ (with giantswarm; [
         gg
