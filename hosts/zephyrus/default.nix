@@ -188,4 +188,17 @@
     config.services.mango-headless.socket;
   systemd.user.services.sunshine.environment.XDG_SESSION_TYPE = "wayland";
   systemd.user.services.sunshine.environment.XDG_CURRENT_DESKTOP = "mango";
+
+  services.avahi.enable = true;
+  # Forcefully nullify the legacy options to stop upstream modules from triggering the warnings
+  services.avahi.publish.enable = null;
+  services.avahi.publish.userServices = null;
+  services.avahi.settings = {
+    # Explicitly declare settings using the modern syntax to override the legacy defaults
+    publish = {
+      disable-publishing = false;
+      publish-addresses = true;
+      disable-user-service-publishing = false;
+    };
+  };
 }
