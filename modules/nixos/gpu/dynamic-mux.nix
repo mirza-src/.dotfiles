@@ -56,6 +56,21 @@ in
     # mango is built from the mangowm flake input (the pinned nightly the
     # patch is made against) with the scenefx revision that flake pins, not
     # nixpkgs' older `mango`/`scenefx` packages, which `prev` would give here.
+    #
+    # Apps keep rendering on the GPU they started on. After a switch, buffers
+    # the new render GPU can't import go through the import helper (a copy on
+    # the old GPU per drawn frame, logged once per window as "renders on
+    # another GPU"). Mesa apps reallocate and stop needing it; others don't.
+    # TODO: Xwayland renders all X11 apps through one GPU picked at startup;
+    #   patch it to reallocate window buffers (linear) when the dmabuf
+    #   feedback's main device changes, and submit upstream.
+    # TODO: Chromium/Electron/CEF (Steam)/QtWebEngine ignore dmabuf feedback
+    #   updates (they read it once at startup); report upstream (Ozone/Wayland).
+    # TODO: optionally advertise only linear modifiers from session start, so
+    #   every app allocates buffers both GPUs can read (no copies, but slower
+    #   rendering for GPU-heavy apps on the iGPU).
+    # TODO: re-import idle windows when the renderer changes; they stay blank
+    #   until their next commit (mango only asks them to redraw).
     nixpkgs.overlays = [
       (
         final: prev:

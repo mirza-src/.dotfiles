@@ -779,6 +779,69 @@ index 3ca6390..5606903 100644
  /**
   * Get the KMS connector object ID.
   */
+diff --git a/include/wlr/types/wlr_buffer.h b/include/wlr/types/wlr_buffer.h
+index 8fd3890..fcc6ada 100644
+--- a/include/wlr/types/wlr_buffer.h
++++ b/include/wlr/types/wlr_buffer.h
+@@ -154,6 +154,8 @@ void wlr_buffer_end_data_ptr_access(struct wlr_buffer *buffer);
+ /**
+  * A client buffer.
+  */
++struct wlr_drm_syncobj_timeline;
++
+ struct wlr_client_buffer {
+ 	struct wlr_buffer base;
+ 
+@@ -166,6 +168,13 @@ struct wlr_client_buffer {
+ 	 * The buffer this client buffer was created from. NULL if destroyed.
+ 	 */
+ 	struct wlr_buffer *source;
++	/**
++	 * If non-NULL, the texture contents are only ready once this timeline
++	 * point is signalled, e.g. for a copy made by the compositor's import
++	 * helper. Renderers must wait for it before sampling the texture.
++	 */
++	struct wlr_drm_syncobj_timeline *wait_timeline;
++	uint64_t wait_point;
+ 
+ 	struct {
+ 		struct wl_listener source_destroy;
+diff --git a/include/wlr/types/wlr_compositor.h b/include/wlr/types/wlr_compositor.h
+index aff42ae..ed78d08 100644
+--- a/include/wlr/types/wlr_compositor.h
++++ b/include/wlr/types/wlr_compositor.h
+@@ -285,6 +285,12 @@ struct wlr_compositor {
+ 	struct {
+ 		struct wl_listener display_destroy;
+ 		struct wl_listener renderer_destroy;
++
++		// See wlr_compositor_set_import_helper()
++		struct wlr_renderer *import_renderer;
++		struct wlr_allocator *import_allocator;
++		struct wl_listener import_renderer_destroy;
++		struct wl_listener import_allocator_destroy;
+ 	} WLR_PRIVATE;
+ };
+ 
+@@ -578,4 +584,18 @@ struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
+ void wlr_compositor_set_renderer(struct wlr_compositor *compositor,
+ 	struct wlr_renderer *renderer);
+ 
++struct wlr_allocator;
++
++/**
++ * Set a renderer and allocator on another GPU to import client buffers the
++ * main renderer can't import (e.g. buffers in a tiling layout only the GPU
++ * that rendered them understands, after the main renderer moved to another
++ * GPU). Such buffers are copied by this renderer into linear buffers, which
++ * the main renderer then imports. Pass NULL to clear; the helper is also
++ * cleared when its renderer or allocator is destroyed.
++ */
++void wlr_compositor_set_import_helper(struct wlr_compositor *compositor,
++	struct wlr_renderer *renderer, struct wlr_allocator *allocator);
++#define WLR_COMPOSITOR_HAS_IMPORT_HELPER 1
++
+ #endif
 diff --git a/include/wlr/types/wlr_linux_dmabuf_v1.h b/include/wlr/types/wlr_linux_dmabuf_v1.h
 index 2193f91..bbee934 100644
 --- a/include/wlr/types/wlr_linux_dmabuf_v1.h
@@ -809,6 +872,382 @@ index 2193f91..bbee934 100644
  /**
   * Set a surface's DMA-BUF feedback.
   *
+diff --git a/types/buffer/client.c b/types/buffer/client.c
+index 5bc6703..e43b464 100644
+--- a/types/buffer/client.c
++++ b/types/buffer/client.c
+@@ -1,6 +1,7 @@
+ #include <assert.h>
+ #include <stdlib.h>
+ #include <wlr/interfaces/wlr_buffer.h>
++#include <wlr/render/drm_syncobj.h>
+ #include <wlr/render/wlr_renderer.h>
+ #include <wlr/util/log.h>
+ #include "types/wlr_buffer.h"
+@@ -30,6 +31,9 @@ static void client_buffer_destroy(struct wlr_buffer *buffer) {
+ 	wl_list_remove(&client_buffer->source_destroy.link);
+ 	wl_list_remove(&client_buffer->renderer_destroy.link);
+ 	wlr_texture_destroy(client_buffer->texture);
++	if (client_buffer->wait_timeline != NULL) {
++		wlr_drm_syncobj_timeline_unref(client_buffer->wait_timeline);
++	}
+ 	free(client_buffer);
+ }
+ 
+diff --git a/types/scene/surface.c b/types/scene/surface.c
+index 89c54a9..d61daf6 100644
+--- a/types/scene/surface.c
++++ b/types/scene/surface.c
+@@ -348,6 +348,12 @@ static void surface_reconfigure(struct wlr_scene_surface *scene_surface) {
+ 			options.wait_timeline = syncobj_surface_state->acquire_timeline;
+ 			options.wait_point = syncobj_surface_state->acquire_point;
+ 		}
++		if (surface->buffer->wait_timeline != NULL) {
++			// A copy of the client buffer (import helper), which itself
++			// already waited for the client's acquire point
++			options.wait_timeline = surface->buffer->wait_timeline;
++			options.wait_point = surface->buffer->wait_point;
++		}
+ 		wlr_scene_buffer_set_buffer_with_options(scene_buffer,
+ 			&surface->buffer->base, &options);
+ 	} else {
+diff --git a/types/wlr_compositor.c b/types/wlr_compositor.c
+index 75faed1..d560264 100644
+--- a/types/wlr_compositor.c
++++ b/types/wlr_compositor.c
+@@ -1,8 +1,14 @@
+ #include <assert.h>
+ #include <stdio.h>
+ #include <stdlib.h>
++#include <string.h>
++#include <drm_fourcc.h>
+ #include <wayland-server-core.h>
++#include <wlr/render/allocator.h>
++#include <wlr/render/drm_syncobj.h>
+ #include <wlr/render/interface.h>
++#include <wlr/render/swapchain.h>
++#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
+ #include <wlr/types/wlr_buffer.h>
+ #include <wlr/types/wlr_compositor.h>
+ #include <wlr/types/wlr_subcompositor.h>
+@@ -10,6 +16,7 @@
+ #include <wlr/util/log.h>
+ #include <wlr/util/region.h>
+ #include <wlr/util/transform.h>
++#include "render/drm_format_set.h"
+ #include "types/wlr_buffer.h"
+ #include "types/wlr_region.h"
+ #include "types/wlr_subcompositor.h"
+@@ -404,6 +411,199 @@ static void surface_state_move(struct wlr_surface_state *state,
+ 	next->cached_state_locks = 0;
+ }
+ 
++// Marks a client buffer the main renderer failed to import, so later commits of
++// the same buffer go straight to the import helper. Only valid for that
++// renderer: after it changes (again), a direct import is worth a try.
++struct import_failed_mark {
++	struct wlr_addon addon;
++	struct wlr_renderer *renderer; // only compared, never dereferenced
++};
++
++static void import_failed_mark_destroy(struct wlr_addon *addon) {
++	struct import_failed_mark *mark = wl_container_of(addon, mark, addon);
++	wlr_addon_finish(&mark->addon);
++	free(mark);
++}
++
++static const struct wlr_addon_interface import_failed_mark_impl = {
++	.name = "wlr_compositor_import_failed",
++	.destroy = import_failed_mark_destroy,
++};
++
++// Per-surface copy target for buffers imported through the helper.
++struct import_copy {
++	struct wlr_addon addon;
++	struct wlr_swapchain *swapchain;
++	uint32_t format;
++	struct wlr_drm_syncobj_timeline *timeline;
++	uint64_t point;
++};
++
++static void import_copy_destroy(struct wlr_addon *addon) {
++	struct import_copy *copy = wl_container_of(addon, copy, addon);
++	wlr_swapchain_destroy(copy->swapchain);
++	if (copy->timeline != NULL) {
++		wlr_drm_syncobj_timeline_unref(copy->timeline);
++	}
++	wlr_addon_finish(&copy->addon);
++	free(copy);
++}
++
++static const struct wlr_addon_interface import_copy_impl = {
++	.name = "wlr_compositor_import_copy",
++	.destroy = import_copy_destroy,
++};
++
++// Logged once per surface when it starts and stops needing the import helper,
++// so it's easy to see which apps keep rendering on another GPU (X11 apps all
++// show up as Xwayland).
++static void log_import_copy_client(struct wlr_surface *surface, bool needed) {
++	if (wlr_log_get_verbosity() < WLR_INFO) {
++		return; // skip the /proc lookup when it wouldn't be logged
++	}
++
++	pid_t pid = 0;
++	wl_client_get_credentials(wl_resource_get_client(surface->resource),
++		&pid, NULL, NULL);
++
++	char comm[64] = "?";
++	char path[64];
++	snprintf(path, sizeof(path), "/proc/%d/comm", (int)pid);
++	FILE *f = fopen(path, "r");
++	if (f != NULL) {
++		if (fgets(comm, sizeof(comm), f) != NULL) {
++			comm[strcspn(comm, "\n")] = '\0';
++		}
++		fclose(f);
++	}
++	if (needed) {
++		wlr_log(WLR_INFO, "Surface of %s (pid %d) renders on another GPU, "
++			"showing it through the import helper", comm, (int)pid);
++	} else {
++		wlr_log(WLR_INFO, "Surface of %s (pid %d) no longer needs the "
++			"import helper", comm, (int)pid);
++	}
++}
++
++// Copy a client buffer the main renderer can't import into a linear buffer
++// using the import helper, and import that instead.
++static struct wlr_client_buffer *import_via_helper(struct wlr_surface *surface,
++		struct wlr_buffer *buffer) {
++	struct wlr_compositor *compositor = surface->compositor;
++	struct wlr_renderer *helper = compositor->import_renderer;
++	struct wlr_allocator *allocator = compositor->import_allocator;
++	if (helper == NULL || allocator == NULL || !helper->features.timeline) {
++		return NULL;
++	}
++
++	struct wlr_dmabuf_attributes dmabuf;
++	if (!wlr_buffer_get_dmabuf(buffer, &dmabuf)) {
++		return NULL;
++	}
++
++	const struct wlr_drm_format_set *main_formats = wlr_renderer_get_texture_formats(
++		compositor->renderer, WLR_BUFFER_CAP_DMABUF);
++	if (main_formats == NULL || !wlr_drm_format_set_has(main_formats,
++			dmabuf.format, DRM_FORMAT_MOD_LINEAR)) {
++		return NULL;
++	}
++
++	struct import_copy *copy = NULL;
++	struct wlr_addon *addon = wlr_addon_find(&surface->addons, compositor,
++		&import_copy_impl);
++	if (addon != NULL) {
++		copy = wl_container_of(addon, copy, addon);
++	} else {
++		copy = calloc(1, sizeof(*copy));
++		if (copy == NULL) {
++			return NULL;
++		}
++		wlr_addon_init(&copy->addon, &surface->addons, compositor,
++			&import_copy_impl);
++		log_import_copy_client(surface, true);
++	}
++
++	if (copy->swapchain == NULL || copy->swapchain->allocator != allocator ||
++			copy->swapchain->width != buffer->width ||
++			copy->swapchain->height != buffer->height ||
++			copy->format != dmabuf.format) {
++		wlr_swapchain_destroy(copy->swapchain);
++		struct wlr_drm_format format = {0};
++		format.format = dmabuf.format;
++		if (!wlr_drm_format_add(&format, DRM_FORMAT_MOD_LINEAR)) {
++			copy->swapchain = NULL;
++			return NULL;
++		}
++		copy->swapchain = wlr_swapchain_create(allocator, buffer->width,
++			buffer->height, &format);
++		wlr_drm_format_finish(&format);
++		copy->format = dmabuf.format;
++		if (copy->swapchain == NULL) {
++			return NULL;
++		}
++	}
++
++	if (copy->timeline != NULL &&
++			copy->timeline->drm_fd != wlr_renderer_get_drm_fd(helper)) {
++		wlr_drm_syncobj_timeline_unref(copy->timeline);
++		copy->timeline = NULL;
++	}
++	if (copy->timeline == NULL) {
++		copy->timeline = wlr_drm_syncobj_timeline_create(
++			wlr_renderer_get_drm_fd(helper));
++		copy->point = 0;
++		if (copy->timeline == NULL) {
++			return NULL;
++		}
++	}
++
++	struct wlr_texture *src = wlr_texture_from_buffer(helper, buffer);
++	if (src == NULL) {
++		return NULL;
++	}
++	struct wlr_buffer *dst = wlr_swapchain_acquire(copy->swapchain);
++	if (dst == NULL) {
++		wlr_texture_destroy(src);
++		return NULL;
++	}
++
++	struct wlr_render_texture_options tex_options = {
++		.texture = src,
++		.blend_mode = WLR_RENDER_BLEND_MODE_NONE,
++	};
++	struct wlr_linux_drm_syncobj_surface_v1_state *syncobj_state =
++		wlr_linux_drm_syncobj_v1_get_surface_state(surface);
++	if (syncobj_state != NULL && syncobj_state->acquire_timeline != NULL) {
++		tex_options.wait_timeline = syncobj_state->acquire_timeline;
++		tex_options.wait_point = syncobj_state->acquire_point;
++	}
++
++	struct wlr_client_buffer *client_buffer = NULL;
++	struct wlr_render_pass *pass = wlr_renderer_begin_buffer_pass(helper, dst,
++		&(struct wlr_buffer_pass_options){
++			.signal_timeline = copy->timeline,
++			.signal_point = copy->point + 1,
++		});
++	if (pass != NULL) {
++		wlr_render_pass_add_texture(pass, &tex_options);
++		if (wlr_render_pass_submit(pass)) {
++			copy->point++;
++			// The texture locks dst, so the swapchain won't reuse it while
++			// it's in use
++			client_buffer = wlr_client_buffer_create(dst, compositor->renderer);
++		}
++		if (client_buffer != NULL) {
++			// Implicit sync from one GPU to another isn't reliable everywhere:
++			// let whoever samples the texture wait for the copy explicitly
++			client_buffer->wait_timeline = wlr_drm_syncobj_timeline_ref(copy->timeline);
++			client_buffer->wait_point = copy->point;
++		}
++	}
++	wlr_texture_destroy(src);
++	wlr_buffer_unlock(dst);
++	return client_buffer;
++}
++
+ static void surface_apply_damage(struct wlr_surface *surface) {
+ 	if (surface->current.buffer == NULL) {
+ 		// NULL commit
+@@ -430,8 +630,43 @@ static void surface_apply_damage(struct wlr_surface *surface) {
+ 		return;
+ 	}
+ 
+-	struct wlr_client_buffer *buffer = wlr_client_buffer_create(
+-			surface->current.buffer, surface->compositor->renderer);
++	struct wlr_compositor *compositor = surface->compositor;
++	struct wlr_buffer *source = surface->current.buffer;
++	struct import_failed_mark *mark = NULL;
++	struct wlr_addon *mark_addon = wlr_addon_find(&source->addons, compositor,
++		&import_failed_mark_impl);
++	if (mark_addon != NULL) {
++		mark = wl_container_of(mark_addon, mark, addon);
++	}
++	bool known_failure = mark != NULL && mark->renderer == compositor->renderer;
++
++	struct wlr_client_buffer *buffer = NULL;
++	if (!known_failure) {
++		buffer = wlr_client_buffer_create(source, compositor->renderer);
++	}
++	if (buffer != NULL) {
++		// The client reallocated for the current renderer: drop the copy
++		// target (its buffers stay alive while still in use)
++		struct wlr_addon *copy_addon = wlr_addon_find(&surface->addons,
++			compositor, &import_copy_impl);
++		if (copy_addon != NULL) {
++			log_import_copy_client(surface, false);
++			import_copy_destroy(copy_addon);
++		}
++	}
++	if (buffer == NULL && compositor->import_renderer != NULL) {
++		if (mark == NULL) {
++			mark = calloc(1, sizeof(*mark));
++			if (mark != NULL) {
++				wlr_addon_init(&mark->addon, &source->addons, compositor,
++					&import_failed_mark_impl);
++			}
++		}
++		if (mark != NULL) {
++			mark->renderer = compositor->renderer;
++		}
++		buffer = import_via_helper(surface, source);
++	}
+ 
+ 	if (buffer == NULL) {
+ 		wlr_log(WLR_ERROR, "Failed to upload buffer");
+@@ -1343,6 +1578,45 @@ static void compositor_bind(struct wl_client *wl_client, void *data,
+ 	wl_resource_set_implementation(resource, &compositor_impl, compositor, NULL);
+ }
+ 
++static void compositor_clear_import_helper(struct wlr_compositor *compositor) {
++	wl_list_remove(&compositor->import_renderer_destroy.link);
++	wl_list_remove(&compositor->import_allocator_destroy.link);
++	wl_list_init(&compositor->import_renderer_destroy.link);
++	wl_list_init(&compositor->import_allocator_destroy.link);
++	compositor->import_renderer = NULL;
++	compositor->import_allocator = NULL;
++}
++
++static void compositor_handle_import_renderer_destroy(
++		struct wl_listener *listener, void *data) {
++	struct wlr_compositor *compositor =
++		wl_container_of(listener, compositor, import_renderer_destroy);
++	compositor_clear_import_helper(compositor);
++}
++
++static void compositor_handle_import_allocator_destroy(
++		struct wl_listener *listener, void *data) {
++	struct wlr_compositor *compositor =
++		wl_container_of(listener, compositor, import_allocator_destroy);
++	compositor_clear_import_helper(compositor);
++}
++
++void wlr_compositor_set_import_helper(struct wlr_compositor *compositor,
++		struct wlr_renderer *renderer, struct wlr_allocator *allocator) {
++	compositor_clear_import_helper(compositor);
++	if (renderer == NULL || allocator == NULL) {
++		return;
++	}
++	compositor->import_renderer = renderer;
++	compositor->import_allocator = allocator;
++	compositor->import_renderer_destroy.notify =
++		compositor_handle_import_renderer_destroy;
++	wl_signal_add(&renderer->events.destroy, &compositor->import_renderer_destroy);
++	compositor->import_allocator_destroy.notify =
++		compositor_handle_import_allocator_destroy;
++	wl_signal_add(&allocator->events.destroy, &compositor->import_allocator_destroy);
++}
++
+ static void compositor_handle_display_destroy(
+ 		struct wl_listener *listener, void *data) {
+ 	struct wlr_compositor *compositor =
+@@ -1354,6 +1628,8 @@ static void compositor_handle_display_destroy(
+ 
+ 	wl_list_remove(&compositor->display_destroy.link);
+ 	wl_list_remove(&compositor->renderer_destroy.link);
++	wl_list_remove(&compositor->import_renderer_destroy.link);
++	wl_list_remove(&compositor->import_allocator_destroy.link);
+ 	wl_global_destroy(compositor->global);
+ 	free(compositor);
+ }
+@@ -1385,6 +1661,8 @@ struct wlr_compositor *wlr_compositor_create(struct wl_display *display,
+ 	wl_signal_init(&compositor->events.destroy);
+ 
+ 	wl_list_init(&compositor->renderer_destroy.link);
++	wl_list_init(&compositor->import_renderer_destroy.link);
++	wl_list_init(&compositor->import_allocator_destroy.link);
+ 
+ 	compositor->display_destroy.notify = compositor_handle_display_destroy;
+ 	wl_display_add_destroy_listener(display, &compositor->display_destroy);
 diff --git a/types/wlr_linux_dmabuf_v1.c b/types/wlr_linux_dmabuf_v1.c
 index 3165e88..127c4d4 100644
 --- a/types/wlr_linux_dmabuf_v1.c

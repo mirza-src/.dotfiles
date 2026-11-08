@@ -40,7 +40,7 @@ index a6f4dec7..83c72466 100644
  
  `hdr:1` alone declares BT.2020 primaries and the PQ transfer function, but leaves
 diff --git a/include/mango/common/server.h b/include/mango/common/server.h
-index 8d298e37..92dbbac6 100644
+index 8d298e37..d0419fdc 100644
 --- a/include/mango/common/server.h
 +++ b/include/mango/common/server.h
 @@ -53,6 +53,10 @@ struct MangoServer {
@@ -54,13 +54,17 @@ index 8d298e37..92dbbac6 100644
  
  	/* wlroots globals */
  	struct wlr_xdg_shell *xdg_shell;
-@@ -213,6 +217,9 @@ struct MangoServer {
+@@ -213,6 +217,13 @@ struct MangoServer {
  	struct wl_listener cursor_motion_absolute_listener;
  	struct wl_listener gpu_reset_listener;
  	struct wl_event_source *recreate_renderer_source;
 +	struct wl_event_source *recreate_renderer_timer;
 +	bool recreate_renderer_retrying;
 +	int32_t recreate_renderer_attempts;
++	/* Previous renderer kept as wlroots' import helper after moving to
++	 * another GPU (see do_renderer_recreate) */
++	struct wlr_renderer *import_helper_renderer;
++	struct wlr_allocator *import_helper_allocator;
  	struct wl_listener layout_change_listener;
  	struct wl_listener new_idle_inhibitor_listener;
  	struct wl_listener new_input_device_listener;
@@ -431,7 +435,7 @@ index bb157060..766f653f 100644
  	if (!c || !c->mon || c->iskilling || !client_surface(c)->mapped ||
  		c->scene->node.enabled)
 diff --git a/src/manage/monitor.c b/src/manage/monitor.c
-index a4ea0c64..a69faad5 100644
+index a4ea0c64..dcdbed6d 100644
 --- a/src/manage/monitor.c
 +++ b/src/manage/monitor.c
 @@ -5,6 +5,7 @@
@@ -564,7 +568,7 @@ index a4ea0c64..a69faad5 100644
  			wlr_output_layout_add_auto(server.output_layout, m->wlr_output);
  	}
  
-@@ -1483,44 +1532,410 @@ void check_vrr_enable(Client *c) {
+@@ -1483,44 +1532,431 @@ void check_vrr_enable(Client *c) {
   * Output / Monitor: output creation/destruction, mode/adaptive sync/ICC,
   * output manager protocol, rendering, and frame-skip control.
   */
@@ -744,23 +748,20 @@ index a4ea0c64..a69faad5 100644
  
  	server.recreate_renderer_source = NULL;
 +	server.recreate_renderer_attempts++;
- 
--	if (!(server.renderer = fx_renderer_create(server.backend)))
--		die("couldn't recreate renderer");
++
 +	if (!(drw = fx_renderer_create(server.backend))) {
 +		mango_error(true, WLR_ERROR, "couldn't recreate renderer");
 +		goto retry;
 +	}
- 
--	if (!(server.allocator =
--			  wlr_allocator_autocreate(server.backend, server.renderer)))
--		die("couldn't recreate allocator");
++
 +	if (!(alloc = wlr_allocator_autocreate(server.backend, drw))) {
 +		mango_error(true, WLR_ERROR, "couldn't recreate allocator");
 +		wlr_renderer_destroy(drw);
 +		goto retry;
 +	}
-+
+ 
+-	if (!(server.renderer = fx_renderer_create(server.backend)))
+-		die("couldn't recreate renderer");
 +	/* wlr_output_init_render() leaves the output untouched on failure. */
 +	wl_list_for_each(m, &server.monitors, link) {
 +		if (!wlr_output_init_render(m->wlr_output, alloc, drw)) {
@@ -784,7 +785,10 @@ index a4ea0c64..a69faad5 100644
 +		wlr_renderer_destroy(drw);
 +		goto retry;
 +	}
-+
+ 
+-	if (!(server.allocator =
+-			  wlr_allocator_autocreate(server.backend, server.renderer)))
+-		die("couldn't recreate allocator");
 +	/* Commit point: from here on the new renderer is in use. */
 +	server.renderer = drw;
 +	server.allocator = alloc;
@@ -795,14 +799,11 @@ index a4ea0c64..a69faad5 100644
  
  	wlr_compositor_set_renderer(server.compositor, server.renderer);
  
--	wl_list_for_each(m, &server.monitors, link) {
--		wlr_output_init_render(m->wlr_output, server.allocator,
--							   server.renderer);
 +	/* Scene-node capture sources hold the old allocator/renderer. */
 +	wl_list_for_each(c, &server.clients, link) {
 +		client_reset_image_capture(c);
- 	}
- 
++	}
++
 +	dev_t old_dev = renderer_drm_dev(old_drw);
 +	dev_t new_dev = renderer_drm_dev(server.renderer);
 +	renderer_update_dmabuf(old_dev, new_dev);
@@ -828,8 +829,29 @@ index a4ea0c64..a69faad5 100644
 +	 * format/feature lists from the old renderer at creation.
 +	 */
 +
- 	wlr_allocator_destroy(old_alloc);
- 	wlr_renderer_destroy(old_drw);
++#ifdef WLR_COMPOSITOR_HAS_IMPORT_HELPER
++	/*
++	 * Moved to another GPU: keep the old renderer as import helper, so
++	 * windows still rendering on the old GPU (clients that ignore dmabuf
++	 * feedback, e.g. Chromium/Electron) keep showing through a copy. The
++	 * previous helper is dropped instead. A GPU reset on the same device
++	 * drops the old renderer as before.
++	 */
++	if (old_dev != new_dev) {
++		struct wlr_renderer *prev_drw = server.import_helper_renderer;
++		struct wlr_allocator *prev_alloc = server.import_helper_allocator;
++
++		wlr_compositor_set_import_helper(server.compositor, old_drw, old_alloc);
++		server.import_helper_renderer = old_drw;
++		server.import_helper_allocator = old_alloc;
++		old_drw = prev_drw;
++		old_alloc = prev_alloc;
++	}
++#endif
++	if (old_alloc)
++		wlr_allocator_destroy(old_alloc);
++	if (old_drw)
++		wlr_renderer_destroy(old_drw);
 +
 +	mango_error(true, WLR_INFO,
 +				"renderer recreated on DRM device %u:%u (was %u:%u)",
@@ -841,7 +863,9 @@ index a4ea0c64..a69faad5 100644
 +	 * failed their first enable. Enable them now from their monitor rules,
 +	 * the same thing a VT switch would eventually trigger.
 +	 */
-+	wl_list_for_each(m, &server.monitors, link) {
+ 	wl_list_for_each(m, &server.monitors, link) {
+-		wlr_output_init_render(m->wlr_output, server.allocator,
+-							   server.renderer);
 +		if (!m->enable_failed || m->wlr_output->enabled || m->prefer_disable)
 +			continue;
 +		m->enable_failed = false;
@@ -856,8 +880,10 @@ index a4ea0c64..a69faad5 100644
 +						"output %s still cannot be enabled on the new renderer",
 +						m->wlr_output->name);
 +		}
-+	}
-+
+ 	}
+ 
+-	wlr_allocator_destroy(old_alloc);
+-	wlr_renderer_destroy(old_drw);
 +	renderer_nudge_repaint();
 +	return;
 +

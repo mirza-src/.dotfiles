@@ -38,6 +38,8 @@ in
     # sees the RTX GPU. That also makes cardwired's discrete-GPU probe fail,
     # which classifies the laptop as "Manual" and disables Integrated/Smart.
     # Register the ICD explicitly for sessions and for the daemon.
+    # TODO: find out why the graphics-drivers buildEnv drops nvidia_icd.json
+    #   (it's in the nvidia-x11 output) and fix it there instead.
     environment.sessionVariables.VK_ADD_DRIVER_FILES = nvidiaVulkanIcd;
     systemd.services.cardwired.environment.VK_ADD_DRIVER_FILES = nvidiaVulkanIcd;
 
@@ -86,6 +88,8 @@ in
               (old.patches or [ ])
               # The probe runs in an "nv-probe-*" kthread that can't see /sys,
               # which silently disables runtime D3 (the dGPU never powers off).
+              # TODO: report to NVIDIA/open-gpu-kernel-modules; drop the patch
+              #   once a driver release fixes it.
               ++ [ ../../../patches/nvidia-open-rtd3-probe-sysfs.patch ]
               ++ optional config.modules.gpu.dynamic-mux.enable ../../../patches/nvidia-open-dynamic-mux.patch;
           });
