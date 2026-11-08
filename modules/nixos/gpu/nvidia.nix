@@ -74,7 +74,21 @@ in
       nvidiaSettings = true;
 
       # Optionally, you may need to select the appropriate driver version for your specific GPU.
-      package = config.boot.kernelPackages.nvidiaPackages.latest;
+      package =
+        let
+          base = config.boot.kernelPackages.nvidiaPackages.latest;
+        in
+        # The NixOS module builds the kernel side from `package.open`.
+        base
+        // {
+          open = base.open.overrideAttrs (old: {
+            patches =
+              (old.patches or [ ])
+              # The probe runs in an "nv-probe-*" kthread that can't see /sys,
+              # which silently disables runtime D3 (the dGPU never powers off).
+              ++ [ ../../../patches/nvidia-open-rtd3-probe-sysfs.patch ];
+          });
+        };
 
       dynamicBoost.enable = false;
     };

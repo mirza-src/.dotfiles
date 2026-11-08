@@ -1,0 +1,78 @@
+diff --git a/kernel-open/nvidia/nv-pci.c b/kernel-open/nvidia/nv-pci.c
+index 48d8b78..fbffe70 100644
+--- a/kernel-open/nvidia/nv-pci.c
++++ b/kernel-open/nvidia/nv-pci.c
+@@ -42,6 +42,9 @@
+ #include <linux/jiffies.h>
+ #include <linux/kernel.h>
+ #include <linux/workqueue.h>
++#include <linux/fs_struct.h>
++#include <linux/pid.h>
++#include <linux/sched/task.h>
+ 
+ #if defined(NV_PM_QOS_READ_VALUE_SUPPORTED)
+ #include <linux/pm_qos.h>
+@@ -422,6 +425,43 @@ static NvBool nv_treat_missing_irq_as_error(void)
+ #endif
+ }
+ 
++#if NV_FILESYSTEM_ACCESS_AVAILABLE
++/*
++ * Open @path relative to PID 1's root (the real system root) instead of the
++ * caller's. Uses file_open_root(const struct path *, ...), Linux >= 5.12.
++ */
++static struct file *nv_filp_open_init_root(const char *path)
++{
++    struct pid *pid = find_get_pid(1);
++    struct task_struct *task = NULL;
++    struct file *file = ERR_PTR(-ESRCH);
++    struct path root;
++
++    if (pid != NULL)
++    {
++        task = get_pid_task(pid, PIDTYPE_PID);
++        put_pid(pid);
++    }
++    if (task == NULL)
++        return file;
++
++    task_lock(task);
++    if (task->fs != NULL)
++    {
++        get_fs_root(task->fs, &root);
++        task_unlock(task);
++        file = file_open_root(&root, path, O_RDONLY, 0);
++        path_put(&root);
++    }
++    else
++    {
++        task_unlock(task);
++    }
++    put_task_struct(task);
++    return file;
++}
++#endif
++
+ static void nv_get_pci_sysfs_config
+ (
+     struct pci_dev *pci_dev,
+@@ -440,6 +480,19 @@ static void nv_get_pci_sysfs_config
+     if (ret > 0 && ret < sizeof(filename))
+     {
+         struct file *file = filp_open(filename, O_RDONLY, 0);
++        if (IS_ERR(file) && PTR_ERR(file) == -ENOENT)
++        {
++            /*
++             * The probe runs in the "nv-probe-*" kernel thread, whose root
++             * (the initial rootfs) has no /sys after switch_root; without
++             * this file runtime D3 would be silently disabled.
++             */
++            file = nv_filp_open_init_root(filename);
++            nv_printf(NV_DBG_INFO,
++                      "NVRM: %s not found from the probe thread, opened via "
++                      "PID 1's root: %s\n", filename,
++                      IS_ERR(file) ? "failed" : "ok");
++        }
+         if (!IS_ERR(file))
+         {
+ #if defined(NV_SEQ_READ_ITER_PRESENT)
