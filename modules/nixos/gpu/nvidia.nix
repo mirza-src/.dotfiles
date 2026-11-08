@@ -7,6 +7,7 @@
 with lib;
 let
   cfg = config.modules.gpu.nvidia;
+  nvidiaVulkanIcd = "${config.hardware.nvidia.package}/share/vulkan/icd.d/nvidia_icd.json";
 in
 {
   imports = [
@@ -31,6 +32,14 @@ in
         external_display_auto_switch = true;
       };
     };
+
+    # The NVIDIA Vulkan ICD (nvidia_icd.json) is missing from the merged
+    # /run/opengl-driver env (only Mesa's ICDs end up there), so Vulkan never
+    # sees the RTX GPU. That also makes cardwired's discrete-GPU probe fail,
+    # which classifies the laptop as "Manual" and disables Integrated/Smart.
+    # Register the ICD explicitly for sessions and for the daemon.
+    environment.sessionVariables.VK_ADD_DRIVER_FILES = nvidiaVulkanIcd;
+    systemd.services.cardwired.environment.VK_ADD_DRIVER_FILES = nvidiaVulkanIcd;
 
     environment.systemPackages = with pkgs; [
       nvitop
