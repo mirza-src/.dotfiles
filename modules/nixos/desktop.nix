@@ -25,6 +25,9 @@ let
     postInstall = (old.postInstall or "") + ''
       patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-workspace-icons-hidpi.patch}
       patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-bar-config-defaults.patch}
+      # Brightness follows the backlight of the lit panel (live display mux:
+      # amdgpu_bl1 goes dark while the dGPU drives the panel via nvidia_0).
+      patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-brightness-follow-mux.patch}
     '';
   });
   dmsPlugins = inputs.dms-plugin-registry.packages.${system};

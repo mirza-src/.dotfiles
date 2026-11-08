@@ -53,6 +53,9 @@
   modules.gpu.nvidia-prime.enable = true;
   modules.gpu.nvidia-prime.amdBusId = "PCI:101:0:0";
   modules.gpu.nvidia-prime.nvidiaBusId = "PCI:100:0:0";
+  # Experimental: live panel switching between iGPU and dGPU (cardwire
+  # "ultimate" mode), see modules/nixos/gpu/dynamic-mux.nix.
+  modules.gpu.dynamic-mux.enable = true;
   modules.gaming.enable = true;
   modules.power.enable = true;
   modules.local-ai.enable = true;

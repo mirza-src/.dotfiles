@@ -1,0 +1,895 @@
+diff --git a/backend/drm/backend.c b/backend/drm/backend.c
+index 5a545b1..5f77d04 100644
+--- a/backend/drm/backend.c
++++ b/backend/drm/backend.c
+@@ -11,7 +11,9 @@
+ #include <xf86drm.h>
+ #include "backend/drm/drm.h"
+ #include "backend/drm/fb.h"
++#include "backend/multi.h"
+ #include "render/drm_format_set.h"
++#include "util/env.h"
+ 
+ struct wlr_drm_backend *get_drm_backend_from_backend(
+ 		struct wlr_backend *wlr_backend) {
+@@ -46,6 +48,12 @@ static void backend_destroy(struct wlr_backend *backend) {
+ 
+ 	wlr_backend_finish(backend);
+ 
++	// Secondaries listening to parent_destroy have been destroyed above
++	wl_list_remove(&drm->group_link);
++	if (drm->primary_update_idle != NULL) {
++		wl_event_source_remove(drm->primary_update_idle);
++	}
++
+ 	wl_list_remove(&drm->session_destroy.link);
+ 	wl_list_remove(&drm->session_active.link);
+ 	wl_list_remove(&drm->parent_destroy.link);
+@@ -104,6 +112,11 @@ struct wlr_backend *wlr_drm_backend_get_parent(struct wlr_backend *backend) {
+ 	return drm->parent ? &drm->parent->backend : NULL;
+ }
+ 
++struct wlr_backend *wlr_drm_backend_get_primary(struct wlr_backend *backend) {
++	struct wlr_drm_backend *drm = get_drm_backend_from_backend(backend);
++	return drm->parent ? &drm->parent->backend : &drm->backend;
++}
++
+ static void handle_session_active(struct wl_listener *listener, void *data) {
+ 	struct wlr_drm_backend *drm =
+ 		wl_container_of(listener, drm, session_active);
+@@ -148,11 +161,54 @@ static void handle_dev_change(struct wl_listener *listener, void *data) {
+ 	}
+ }
+ 
++static struct wlr_drm_backend *pick_primary(struct wlr_drm_backend *drm,
++	struct wlr_drm_backend *exclude, const char **reason);
++static void drm_backend_promote(struct wlr_drm_backend *new_primary,
++	struct wlr_drm_backend *dying);
++static void drm_backend_emit_renderer_lost(struct wlr_drm_backend *primary);
++
++static bool dynamic_primary_enabled(void) {
++	static int enabled = -1;
++	if (enabled < 0) {
++		enabled = env_parse_bool("WLR_DRM_DYNAMIC_PRIMARY");
++	}
++	return enabled;
++}
++
+ static void handle_dev_remove(struct wl_listener *listener, void *data) {
+ 	struct wlr_drm_backend *drm = wl_container_of(listener, drm, dev_remove);
+ 
++	// By default, removing the primary GPU destroys all of its secondaries
++	// (via parent_destroy). With WLR_DRM_DYNAMIC_PRIMARY, promote one of the
++	// secondaries instead so that its outputs survive.
++	struct wlr_drm_backend *survivor = drm->parent;
++	bool promoted = false;
++	if (drm->parent == NULL && !wl_list_empty(&drm->group_link) &&
++			dynamic_primary_enabled()) {
++		const char *reason = NULL;
++		survivor = pick_primary(drm, drm, &reason);
++		if (survivor == NULL) {
++			// No GPU with outputs left: take the first one
++			survivor = wl_container_of(drm->group_link.next, survivor, group_link);
++			reason = "first remaining GPU";
++		}
++		wlr_log(WLR_INFO, "Primary GPU %s removed, promoting %s (%s)",
++			drm->name, survivor->name, reason);
++		drm_backend_promote(survivor, drm);
++		promoted = true;
++	}
++
+ 	wlr_log(WLR_INFO, "Destroying DRM backend for %s", drm->name);
+ 	backend_destroy(&drm->backend);
++
++	if (promoted) {
++		// Outputs of the removed GPU are gone now, the compositor must move
++		// rendering to the new primary
++		drm_backend_emit_renderer_lost(survivor);
++	}
++	if (survivor != NULL) {
++		drm_backend_schedule_primary_update(survivor);
++	}
+ }
+ 
+ static void handle_session_destroy(struct wl_listener *listener, void *data) {
+@@ -164,6 +220,8 @@ static void handle_session_destroy(struct wl_listener *listener, void *data) {
+ static void handle_parent_destroy(struct wl_listener *listener, void *data) {
+ 	struct wlr_drm_backend *drm =
+ 		wl_container_of(listener, drm, parent_destroy);
++	// The whole group goes away, don't let anyone look up the dying parent
++	drm->parent = NULL;
+ 	backend_destroy(&drm->backend);
+ }
+ 
+@@ -176,15 +234,52 @@ static void sanitize_mgpu_modifiers(struct wlr_drm_format_set *set) {
+ 	}
+ }
+ 
+-static bool init_mgpu_renderer(struct wlr_drm_backend *drm) {
++static void finish_mgpu_renderer(struct wlr_drm_backend *drm) {
++	finish_drm_renderer(&drm->mgpu_renderer);
++	drm->mgpu_renderer = (struct wlr_drm_renderer){0};
++	wlr_drm_format_set_finish(&drm->mgpu_formats);
++}
++
++// Without a blit renderer the primary GPU's buffers are scanned out directly,
++// which needs explicit modifiers. Keep the original formats in case this GPU
++// becomes primary (or gets a blit renderer) again.
++static void sanitize_plane_formats(struct wlr_drm_backend *drm) {
++	if (drm->mgpu_formats_sanitized) {
++		return;
++	}
++	for (size_t i = 0; i < drm->num_planes; i++) {
++		struct wlr_drm_plane *plane = &drm->planes[i];
++		wlr_drm_format_set_copy(&plane->unsanitized_formats, &plane->formats);
++		sanitize_mgpu_modifiers(&plane->formats);
++	}
++	drm->mgpu_formats_sanitized = true;
++}
++
++static void restore_plane_formats(struct wlr_drm_backend *drm) {
++	if (!drm->mgpu_formats_sanitized) {
++		return;
++	}
++	for (size_t i = 0; i < drm->num_planes; i++) {
++		struct wlr_drm_plane *plane = &drm->planes[i];
++		wlr_drm_format_set_finish(&plane->formats);
++		plane->formats = plane->unsanitized_formats;
++		plane->unsanitized_formats = (struct wlr_drm_format_set){0};
++	}
++	drm->mgpu_formats_sanitized = false;
++}
++
++static bool init_mgpu_renderer(struct wlr_drm_backend *drm, bool allow_fallback) {
+ 	if (!init_drm_renderer(drm, &drm->mgpu_renderer)) {
++		drm->mgpu_renderer = (struct wlr_drm_renderer){0};
++		if (!allow_fallback) {
++			// Callers log the outcome
++			wlr_log(WLR_DEBUG, "Failed to initialize mgpu blit renderer");
++			return false;
++		}
++
+ 		wlr_log(WLR_INFO, "Failed to initialize mgpu blit renderer"
+ 			", falling back to scanning out from primary GPU");
+-
+-		for (uint32_t plane_idx = 0; plane_idx < drm->num_planes; plane_idx++) {
+-			struct wlr_drm_plane *plane = &drm->planes[plane_idx];
+-			sanitize_mgpu_modifiers(&plane->formats);
+-		}
++		sanitize_plane_formats(drm);
+ 		return true;
+ 	}
+ 
+@@ -195,16 +290,298 @@ static bool init_mgpu_renderer(struct wlr_drm_backend *drm) {
+ 		wlr_renderer_get_texture_formats(renderer, WLR_BUFFER_CAP_DMABUF);
+ 	if (texture_formats == NULL) {
+ 		wlr_log(WLR_ERROR, "Failed to query renderer texture formats");
++		finish_mgpu_renderer(drm);
+ 		return false;
+ 	}
+ 
+ 	wlr_drm_format_set_copy(&drm->mgpu_formats, texture_formats);
+ 	sanitize_mgpu_modifiers(&drm->mgpu_formats);
+-	drm->backend.features.timeline = drm->backend.features.timeline &&
++	drm->backend.features.timeline = drm->kms_timeline &&
+ 		drm->mgpu_renderer.wlr_rend->features.timeline;
+ 	return true;
+ }
+ 
++static bool connector_is_internal(const struct wlr_drm_connector *conn) {
++	switch (conn->type) {
++	case DRM_MODE_CONNECTOR_eDP:
++	case DRM_MODE_CONNECTOR_LVDS:
++	case DRM_MODE_CONNECTOR_DSI:
++		return true;
++	default:
++		return false;
++	}
++}
++
++static bool drm_backend_has_connected(struct wlr_drm_backend *drm,
++		bool internal_only) {
++	struct wlr_drm_connector *conn;
++	wl_list_for_each(conn, &drm->connectors, link) {
++		if (conn->status != DRM_MODE_CONNECTED || conn->lease != NULL ||
++				conn->output.non_desktop) {
++			continue;
++		}
++		if (internal_only && !connector_is_internal(conn)) {
++			continue;
++		}
++		return true;
++	}
++	return false;
++}
++
++/**
++ * Pick the GPU which should be primary among the group of drm, ignoring
++ * exclude (may be NULL). A GPU driving a connected internal panel wins,
++ * otherwise the first GPU (in creation order, ie. WLR_DRM_DEVICES order)
++ * with any connected output. Returns NULL if no GPU qualifies.
++ */
++static struct wlr_drm_backend *pick_primary(struct wlr_drm_backend *drm,
++		struct wlr_drm_backend *exclude, const char **reason) {
++	struct wlr_drm_backend *internal = NULL, *any = NULL;
++	struct wlr_drm_backend *cur = drm;
++	do {
++		if (cur != exclude) {
++			if (drm_backend_has_connected(cur, true) &&
++					(internal == NULL || cur->seq < internal->seq)) {
++				internal = cur;
++			}
++			if (drm_backend_has_connected(cur, false) &&
++					(any == NULL || cur->seq < any->seq)) {
++				any = cur;
++			}
++		}
++		cur = wl_container_of(cur->group_link.next, cur, group_link);
++	} while (cur != drm);
++
++	if (internal != NULL) {
++		*reason = "it drives the internal panel";
++		return internal;
++	}
++	*reason = "first GPU with a connected output";
++	return any;
++}
++
++/**
++ * Turn new_primary (currently a secondary) into the primary of its group, and
++ * all other members except dying into its secondaries. The previous primary
++ * must already have its mgpu renderer set up, unless it is dying.
++ */
++static void drm_backend_promote(struct wlr_drm_backend *new_primary,
++		struct wlr_drm_backend *dying) {
++	assert(new_primary->parent != NULL);
++
++	// The new primary renders itself, drop all of its blit state
++	for (size_t i = 0; i < new_primary->num_planes; i++) {
++		finish_drm_surface(&new_primary->planes[i].mgpu_surf);
++	}
++	restore_plane_formats(new_primary);
++	new_primary->mgpu_retry = false;
++	finish_mgpu_renderer(new_primary);
++	new_primary->backend.features.timeline = new_primary->kms_timeline;
++
++	struct wlr_drm_backend *cur = new_primary;
++	while ((cur = wl_container_of(cur->group_link.next, cur, group_link)) != new_primary) {
++		wl_list_remove(&cur->parent_destroy.link);
++		cur->parent = new_primary;
++		if (cur == dying) {
++			// Not a member anymore, but keep a pointer to the successor
++			// for drm_backend_monitor
++			wl_list_init(&cur->parent_destroy.link);
++			continue;
++		}
++		cur->parent_destroy.notify = handle_parent_destroy;
++		wl_signal_add(&new_primary->backend.events.destroy, &cur->parent_destroy);
++	}
++
++	wl_list_remove(&new_primary->parent_destroy.link);
++	wl_list_init(&new_primary->parent_destroy.link);
++	new_primary->parent = NULL;
++
++	// Let the multi backend recompute the intersection of features
++	cur = new_primary;
++	do {
++		multi_backend_refresh_features_for_sub(&cur->backend);
++		cur = wl_container_of(cur->group_link.next, cur, group_link);
++	} while (cur != new_primary);
++}
++
++static bool same_device(int fd_a, int fd_b) {
++	drmDevice *dev_a = NULL, *dev_b = NULL;
++	bool same = false;
++	if (drmGetDevice2(fd_a, 0, &dev_a) == 0 &&
++			drmGetDevice2(fd_b, 0, &dev_b) == 0) {
++		same = drmDevicesEqual(dev_a, dev_b);
++	}
++	drmFreeDevice(&dev_a);
++	drmFreeDevice(&dev_b);
++	return same;
++}
++
++/**
++ * Emit the lost signal once on each renderer used by outputs of the group,
++ * unless it already renders on the new primary. Compositors handle this like
++ * a GPU reset and re-create their renderer and allocator, which picks up the
++ * new primary via wlr_backend_get_drm_fd().
++ */
++static void drm_backend_emit_renderer_lost(struct wlr_drm_backend *primary) {
++	struct wl_array renderers;
++	wl_array_init(&renderers);
++
++	struct wlr_drm_backend *cur = primary;
++	do {
++		struct wlr_drm_connector *conn;
++		wl_list_for_each(conn, &cur->connectors, link) {
++			struct wlr_renderer *renderer = conn->output.renderer;
++			if (conn->status != DRM_MODE_CONNECTED || renderer == NULL) {
++				continue;
++			}
++
++			bool found = false;
++			struct wlr_renderer **r;
++			wl_array_for_each(r, &renderers) {
++				found = found || *r == renderer;
++			}
++			if (found) {
++				continue;
++			}
++
++			int render_fd = wlr_renderer_get_drm_fd(renderer);
++			if (render_fd >= 0 && same_device(render_fd, primary->fd)) {
++				continue;
++			}
++
++			r = wl_array_add(&renderers, sizeof(*r));
++			if (r == NULL) {
++				wlr_log(WLR_ERROR, "Allocation failed");
++				continue;
++			}
++			*r = renderer;
++		}
++		cur = wl_container_of(cur->group_link.next, cur, group_link);
++	} while (cur != primary);
++
++	// Collected first because the compositor will likely destroy renderers
++	// and re-initialize outputs from within the signal handler
++	struct wlr_renderer **r;
++	wl_array_for_each(r, &renderers) {
++		wlr_log(WLR_INFO, "Signalling renderer loss to switch to primary GPU %s",
++			primary->name);
++		wl_signal_emit_mutable(&(*r)->events.lost, NULL);
++	}
++	wl_array_release(&renderers);
++}
++
++static bool drm_backend_has_enabled_outputs(struct wlr_drm_backend *drm) {
++	struct wlr_drm_connector *conn;
++	wl_list_for_each(conn, &drm->connectors, link) {
++		if (conn->status == DRM_MODE_CONNECTED && conn->output.enabled) {
++			return true;
++		}
++	}
++	return false;
++}
++
++void drm_backend_retry_mgpu_renderer(struct wlr_drm_backend *drm) {
++	if (!drm->mgpu_retry || drm->parent == NULL) {
++		return;
++	}
++	if (drm->mgpu_renderer.wlr_rend != NULL) {
++		drm->mgpu_retry = false;
++		return;
++	}
++	if (!init_mgpu_renderer(drm, false)) {
++		wlr_log(WLR_DEBUG, "Multi-GPU renderer on %s still unavailable",
++			drm->name);
++		return;
++	}
++	// Real blit renderer now: planes no longer need the sanitized formats
++	restore_plane_formats(drm);
++	drm->mgpu_retry = false;
++	multi_backend_refresh_features_for_sub(&drm->backend);
++	wlr_log(WLR_INFO, "Multi-GPU renderer on %s set up", drm->name);
++}
++
++bool wlr_drm_backend_set_primary(struct wlr_backend *backend) {
++	struct wlr_drm_backend *drm = get_drm_backend_from_backend(backend);
++	struct wlr_drm_backend *old_primary = drm->parent;
++	if (old_primary == NULL) {
++		return true;
++	}
++
++	uint64_t cap;
++	if (drmGetCap(drm->fd, DRM_CAP_PRIME, &cap) ||
++			!(cap & DRM_PRIME_CAP_EXPORT)) {
++		wlr_log(WLR_ERROR, "Cannot make %s primary: PRIME export not supported",
++			drm->name);
++		return false;
++	}
++
++	// The old primary needs a blit renderer to become a secondary. This is
++	// the only step which can fail, do it before touching anything else.
++	if (!init_mgpu_renderer(old_primary, false)) {
++		// Moving rendering *off* a GPU must not depend on being able to use
++		// it: it may already be powered down or blocked. That's fine as long
++		// as none of its outputs are lit; set up the blit renderer later.
++		if (drm_backend_has_enabled_outputs(old_primary)) {
++			wlr_log(WLR_ERROR, "Cannot make %s primary: failed to set up "
++				"multi-GPU renderer on %s, which still drives outputs",
++				drm->name, old_primary->name);
++			return false;
++		}
++		wlr_log(WLR_INFO, "No multi-GPU renderer on %s (no lit outputs), "
++			"will retry on its next connector scan", old_primary->name);
++		sanitize_plane_formats(old_primary);
++		old_primary->mgpu_retry = true;
++	}
++
++	drm_backend_promote(drm, NULL);
++	wlr_log(WLR_INFO, "Primary GPU changed from %s to %s",
++		old_primary->name, drm->name);
++
++	drm_backend_emit_renderer_lost(drm);
++	return true;
++}
++
++static void handle_primary_update_idle(void *data) {
++	struct wlr_drm_backend *drm = data;
++	drm->primary_update_idle = NULL;
++
++	struct wlr_drm_backend *current = drm->parent ? drm->parent : drm;
++	if (wl_list_empty(&current->group_link)) {
++		return; // Single GPU
++	}
++
++	const char *reason = NULL;
++	struct wlr_drm_backend *best = pick_primary(current, NULL, &reason);
++	if (best == NULL) {
++		wlr_log(WLR_DEBUG, "No GPU has a connected output, "
++			"keeping %s as primary GPU", current->name);
++		return;
++	}
++	if (best == current) {
++		return;
++	}
++
++	wlr_log(WLR_INFO, "Switching primary GPU from %s to %s: %s",
++		current->name, best->name, reason);
++	if (!wlr_drm_backend_set_primary(&best->backend)) {
++		wlr_log(WLR_ERROR, "Failed to switch primary GPU to %s, keeping %s",
++			best->name, current->name);
++	}
++}
++
++void drm_backend_schedule_primary_update(struct wlr_drm_backend *drm) {
++	if (drm->primary_update_idle != NULL || !dynamic_primary_enabled()) {
++		return;
++	}
++	// Deferred so that hotplug events of all GPUs (eg. a panel moving from one
++	// GPU to another via a mux) are processed before deciding
++	drm->primary_update_idle = wl_event_loop_add_idle(drm->session->event_loop,
++		handle_primary_update_idle, drm);
++	if (drm->primary_update_idle == NULL) {
++		wlr_log(WLR_ERROR, "Failed to schedule primary GPU update");
++	}
++}
++
+ struct wlr_backend *wlr_drm_backend_create(struct wlr_session *session,
+ 		struct wlr_device *dev, struct wlr_backend *parent) {
+ 	assert(session && dev);
+@@ -243,13 +620,21 @@ struct wlr_backend *wlr_drm_backend_create(struct wlr_session *session,
+ 	drm->fd = dev->fd;
+ 	drm->name = name;
+ 
++	static uint64_t next_seq = 0;
++	drm->seq = next_seq++;
++
+ 	if (parent != NULL) {
+-		drm->parent = get_drm_backend_from_backend(parent);
++		// Always attach to the current primary, parent may have been demoted
++		// by wlr_drm_backend_set_primary()
++		drm->parent = get_drm_backend_from_backend(
++			wlr_drm_backend_get_primary(parent));
+ 
+ 		drm->parent_destroy.notify = handle_parent_destroy;
+-		wl_signal_add(&parent->events.destroy, &drm->parent_destroy);
++		wl_signal_add(&drm->parent->backend.events.destroy, &drm->parent_destroy);
++		wl_list_insert(drm->parent->group_link.prev, &drm->group_link);
+ 	} else {
+ 		wl_list_init(&drm->parent_destroy.link);
++		wl_list_init(&drm->group_link);
+ 	}
+ 
+ 	drm->dev_change.notify = handle_dev_change;
+@@ -271,12 +656,13 @@ struct wlr_backend *wlr_drm_backend_create(struct wlr_session *session,
+ 	if (!check_drm_features(drm)) {
+ 		goto error_event;
+ 	}
++	drm->kms_timeline = drm->backend.features.timeline;
+ 
+ 	if (!init_drm_resources(drm)) {
+ 		goto error_event;
+ 	}
+ 
+-	if (drm->parent && !init_mgpu_renderer(drm)) {
++	if (drm->parent && !init_mgpu_renderer(drm, true)) {
+ 		goto error_mgpu_renderer;
+ 	}
+ 
+@@ -295,6 +681,7 @@ error_fd:
+ 	wl_list_remove(&drm->dev_remove.link);
+ 	wl_list_remove(&drm->dev_change.link);
+ 	wl_list_remove(&drm->parent_destroy.link);
++	wl_list_remove(&drm->group_link);
+ 	wlr_session_close_file(drm->session, dev);
+ 	free(drm->name);
+ 	free(drm);
+diff --git a/backend/drm/drm.c b/backend/drm/drm.c
+index bd29872..8eceb9a 100644
+--- a/backend/drm/drm.c
++++ b/backend/drm/drm.c
+@@ -408,6 +408,7 @@ void finish_drm_resources(struct wlr_drm_backend *drm) {
+ 		struct wlr_drm_plane *plane = &drm->planes[i];
+ 		drm_plane_finish_surface(plane);
+ 		wlr_drm_format_set_finish(&plane->formats);
++		wlr_drm_format_set_finish(&plane->unsanitized_formats);
+ 		free(plane->cursor_sizes);
+ 	}
+ 
+@@ -1561,6 +1562,7 @@ static struct wlr_drm_connector *create_drm_connector(struct wlr_drm_backend *dr
+ 	wlr_conn->backend = drm;
+ 	wlr_conn->status = DRM_MODE_DISCONNECTED;
+ 	wlr_conn->id = drm_conn->connector_id;
++	wlr_conn->type = drm_conn->connector_type;
+ 
+ 	if (!get_drm_connector_props(drm->fd, wlr_conn->id, &wlr_conn->props)) {
+ 		free(wlr_conn);
+@@ -1781,6 +1783,8 @@ void scan_drm_connectors(struct wlr_drm_backend *drm,
+ 		wlr_log(WLR_INFO, "Scanning DRM connectors on %s", drm->name);
+ 	}
+ 
++	drm_backend_retry_mgpu_renderer(drm);
++
+ 	drmModeRes *res = drmModeGetResources(drm->fd);
+ 	if (!res) {
+ 		wlr_log_errno(WLR_ERROR, "Failed to get DRM resources");
+@@ -1896,6 +1900,8 @@ void scan_drm_connectors(struct wlr_drm_backend *drm,
+ 		wl_signal_emit_mutable(&drm->backend.events.new_output,
+ 			&conn->output);
+ 	}
++
++	drm_backend_schedule_primary_update(drm);
+ }
+ 
+ void scan_drm_leases(struct wlr_drm_backend *drm) {
+diff --git a/backend/drm/monitor.c b/backend/drm/monitor.c
+index efd8537..794b8b1 100644
+--- a/backend/drm/monitor.c
++++ b/backend/drm/monitor.c
+@@ -25,6 +25,8 @@ static void handle_add_drm_card(struct wl_listener *listener, void *data) {
+ 	}
+ 
+ 	wlr_log(WLR_DEBUG, "Creating DRM backend for %s after hotplug", event->path);
++	// wlr_drm_backend_create() attaches to the current primary, primary_drm
++	// may have been demoted by wlr_drm_backend_set_primary()
+ 	struct wlr_backend *child_drm = wlr_drm_backend_create(backend_monitor->session,
+ 		dev, backend_monitor->primary_drm);
+ 	if (!child_drm) {
+@@ -53,6 +55,18 @@ static void handle_session_destroy(struct wl_listener *listener, void *data) {
+ static void handle_primary_drm_destroy(struct wl_listener *listener, void *data) {
+ 	struct wlr_drm_backend_monitor *backend_monitor =
+ 		wl_container_of(listener, backend_monitor, primary_drm_destroy);
++
++	// primary_drm is just a handle on the group of DRM backends. If the group
++	// survives (the backend was a secondary, or a secondary got promoted when
++	// the primary GPU was removed), the parent points to the current primary.
++	struct wlr_backend *next = wlr_drm_backend_get_parent(backend_monitor->primary_drm);
++	if (next != NULL) {
++		wl_list_remove(&backend_monitor->primary_drm_destroy.link);
++		backend_monitor->primary_drm = next;
++		wl_signal_add(&next->events.destroy, &backend_monitor->primary_drm_destroy);
++		return;
++	}
++
+ 	drm_backend_monitor_destroy(backend_monitor);
+ }
+ 
+diff --git a/backend/multi/backend.c b/backend/multi/backend.c
+index 3d8fb96..ff6ec00 100644
+--- a/backend/multi/backend.c
++++ b/backend/multi/backend.c
+@@ -3,11 +3,16 @@
+ #include <stdlib.h>
+ #include <time.h>
+ #include <wlr/backend/interface.h>
++#include <wlr/config.h>
+ #include <wlr/types/wlr_buffer.h>
+ #include <wlr/types/wlr_output.h>
+ #include <wlr/util/log.h>
+ #include "backend/multi.h"
+ 
++#if WLR_HAS_DRM_BACKEND
++#include <wlr/backend/drm.h>
++#endif
++
+ struct subbackend_state {
+ 	struct wlr_backend *backend;
+ 	struct wlr_backend *container;
+@@ -68,14 +73,26 @@ static void multi_backend_destroy(struct wlr_backend *wlr_backend) {
+ static int multi_backend_get_drm_fd(struct wlr_backend *backend) {
+ 	struct wlr_multi_backend *multi = multi_backend_from_backend(backend);
+ 
++	int fd = -1;
+ 	struct subbackend_state *sub;
+ 	wl_list_for_each(sub, &multi->backends, link) {
+-		if (sub->backend->impl->get_drm_fd) {
++		if (!sub->backend->impl->get_drm_fd) {
++			continue;
++		}
++#if WLR_HAS_DRM_BACKEND
++		// The primary DRM backend can change at runtime (see
++		// wlr_drm_backend_set_primary()), it's the one without a parent
++		if (wlr_backend_is_drm(sub->backend) &&
++				wlr_drm_backend_get_parent(sub->backend) == NULL) {
+ 			return wlr_backend_get_drm_fd(sub->backend);
+ 		}
++#endif
++		if (fd < 0) {
++			fd = wlr_backend_get_drm_fd(sub->backend);
++		}
+ 	}
+ 
+-	return -1;
++	return fd;
+ }
+ 
+ static int compare_output_state_backend(const void *data_a, const void *data_b) {
+@@ -233,6 +250,20 @@ static void multi_backend_refresh_features(struct wlr_multi_backend *multi) {
+ 	}
+ }
+ 
++void multi_backend_refresh_features_for_sub(struct wlr_backend *backend) {
++	// Find the multi backends this backend belongs to via their destroy
++	// listeners: sub-backends have no back-pointer to their multi backend,
++	// and handle_subbackend_destroy identifies ours among other listeners
++	struct wl_listener *listener;
++	wl_list_for_each(listener, &backend->events.destroy.listener_list, link) {
++		if (listener->notify != handle_subbackend_destroy) {
++			continue;
++		}
++		struct subbackend_state *sub = wl_container_of(listener, sub, destroy);
++		multi_backend_refresh_features(multi_backend_from_backend(sub->container));
++	}
++}
++
+ bool wlr_multi_backend_add(struct wlr_backend *_multi,
+ 		struct wlr_backend *backend) {
+ 	assert(_multi && backend);
+diff --git a/include/backend/drm/drm.h b/include/backend/drm/drm.h
+index a8c5e07..836ebf8 100644
+--- a/include/backend/drm/drm.h
++++ b/include/backend/drm/drm.h
+@@ -26,6 +26,9 @@ struct wlr_drm_plane {
+ 
+ 	/* Only initialized on multi-GPU setups */
+ 	struct wlr_drm_surface mgpu_surf;
++	/* Copy of formats before implicit modifiers were stripped, only set if
++	 * wlr_drm_backend.mgpu_formats_sanitized */
++	struct wlr_drm_format_set unsanitized_formats;
+ 
+ 	/* Buffer submitted to the kernel, will be presented on next vblank */
+ 	struct wlr_drm_fb *queued_fb;
+@@ -92,6 +95,11 @@ struct wlr_drm_backend {
+ 	struct wlr_backend backend;
+ 
+ 	struct wlr_drm_backend *parent;
++	/* Circular list (without head) of all DRM backends sharing the same
++	 * primary, including the primary itself */
++	struct wl_list group_link;
++	/* Creation order, used to pick a primary GPU deterministically */
++	uint64_t seq;
+ 	const struct wlr_drm_interface *iface;
+ 	bool addfb2_modifiers;
+ 
+@@ -127,6 +135,17 @@ struct wlr_drm_backend {
+ 	uint64_t cursor_width, cursor_height;
+ 
+ 	struct wlr_drm_format_set mgpu_formats;
++	/* Plane formats had implicit modifiers stripped (no mgpu renderer) */
++	bool mgpu_formats_sanitized;
++	/* The blit renderer could not be created when this GPU was demoted
++	 * (e.g. access to it was blocked); retried at the start of this GPU's
++	 * next connector scan (hotplug or session activation) */
++	bool mgpu_retry;
++	/* Timeline support of KMS alone, without the mgpu renderer */
++	bool kms_timeline;
++
++	/* Pending re-evaluation of the primary GPU, see WLR_DRM_DYNAMIC_PRIMARY */
++	struct wl_event_source *primary_update_idle;
+ 
+ 	bool supports_tearing_page_flips;
+ };
+@@ -198,6 +217,7 @@ struct wlr_drm_connector {
+ 	char name[24];
+ 	drmModeConnection status;
+ 	uint32_t id;
++	uint32_t type; // DRM_MODE_CONNECTOR_*
+ 	uint64_t max_bpc_bounds[2];
+ 	struct wlr_drm_lease *lease;
+ 
+@@ -233,6 +253,8 @@ void finish_drm_resources(struct wlr_drm_backend *drm);
+ void scan_drm_connectors(struct wlr_drm_backend *state,
+ 	struct wlr_device_hotplug_event *event);
+ void scan_drm_leases(struct wlr_drm_backend *drm);
++void drm_backend_schedule_primary_update(struct wlr_drm_backend *drm);
++void drm_backend_retry_mgpu_renderer(struct wlr_drm_backend *drm);
+ bool commit_drm_device(struct wlr_drm_backend *drm,
+ 	const struct wlr_backend_output_state *states, size_t states_len, bool test_only);
+ int handle_drm_event(int fd, uint32_t mask, void *data);
+diff --git a/include/backend/drm/monitor.h b/include/backend/drm/monitor.h
+index 5181719..ac82171 100644
+--- a/include/backend/drm/monitor.h
++++ b/include/backend/drm/monitor.h
+@@ -8,7 +8,7 @@
+  */
+ struct wlr_drm_backend_monitor {
+ 	struct wlr_backend *multi;
+-	struct wlr_backend *primary_drm;
++	struct wlr_backend *primary_drm; // any DRM backend of the group
+ 	struct wlr_session *session;
+ 
+ 	struct wl_listener multi_destroy;
+diff --git a/include/backend/multi.h b/include/backend/multi.h
+index 3ffd814..e90c9c9 100644
+--- a/include/backend/multi.h
++++ b/include/backend/multi.h
+@@ -18,4 +18,10 @@ struct wlr_multi_backend {
+ 	} events;
+ };
+ 
++/**
++ * Recompute the features of the multi backend(s) containing this sub-backend,
++ * e.g. after its features changed at runtime.
++ */
++void multi_backend_refresh_features_for_sub(struct wlr_backend *backend);
++
+ #endif
+diff --git a/include/wlr/backend/drm.h b/include/wlr/backend/drm.h
+index 3ca6390..5606903 100644
+--- a/include/wlr/backend/drm.h
++++ b/include/wlr/backend/drm.h
+@@ -47,6 +47,37 @@ bool wlr_output_is_drm(struct wlr_output *output);
+  */
+ struct wlr_backend *wlr_drm_backend_get_parent(struct wlr_backend *backend);
+ 
++/**
++ * Make `backend` (a DRM backend) the primary render GPU at runtime. All other
++ * DRM backends become its secondaries (multi-GPU blit). Emits `lost` once on
++ * every output renderer that is not on the new primary GPU, so compositors
++ * recreate their renderer/allocator via their GPU-reset path. Returns false
++ * and changes nothing on failure. No-op (true) if already primary.
++ *
++ * If the old primary's blit renderer can't be created (e.g. the GPU is
++ * blocked or powered down) this still succeeds as long as none of its outputs
++ * are lit; the blit renderer is retried on that GPU's next connector scan.
++ *
++ * Compositors re-creating their renderer should use wlr_backend_get_drm_fd()
++ * on the multi backend (or wlr_renderer_autocreate()), which returns the
++ * current primary.
++ *
++ * If the WLR_DRM_DYNAMIC_PRIMARY environment variable is set, this is done
++ * automatically after connector hotplug: a GPU with a connected internal
++ * panel wins, otherwise the first GPU with any connected output. With that
++ * variable set, removing the primary GPU promotes a secondary instead of
++ * destroying all secondaries along with it (without the PRIME export check
++ * done here).
++ */
++bool wlr_drm_backend_set_primary(struct wlr_backend *backend);
++
++/**
++ * Returns the current primary DRM backend for any DRM backend.
++ */
++struct wlr_backend *wlr_drm_backend_get_primary(struct wlr_backend *backend);
++
++#define WLR_DRM_HAS_DYNAMIC_PRIMARY 1
++
+ /**
+  * Get the KMS connector object ID.
+  */
+diff --git a/include/wlr/types/wlr_linux_dmabuf_v1.h b/include/wlr/types/wlr_linux_dmabuf_v1.h
+index 2193f91..bbee934 100644
+--- a/include/wlr/types/wlr_linux_dmabuf_v1.h
++++ b/include/wlr/types/wlr_linux_dmabuf_v1.h
+@@ -59,6 +59,7 @@ struct wlr_linux_dmabuf_v1 {
+ 		struct wlr_linux_dmabuf_feedback_v1_compiled *default_feedback;
+ 		struct wlr_drm_format_set default_formats; // for legacy clients
+ 		struct wl_list surfaces; // wlr_linux_dmabuf_v1_surface.link
++		struct wl_list default_feedback_resources; // wl_resource_get_link()
+ 
+ 		int main_device_fd; // to sanity check FDs sent by clients, -1 if unavailable
+ 
+@@ -95,6 +96,17 @@ struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create_with_renderer(struct wl_d
+ void wlr_linux_dmabuf_v1_set_check_dmabuf_callback(struct wlr_linux_dmabuf_v1 *linux_dmabuf,
+ 	bool (*callback)(struct wlr_dmabuf_attributes *attribs, void *data), void *data);
+ 
++/**
++ * Replace the default feedback at runtime and re-send it to all bound
++ * default-feedback objects and to surface-feedback objects of surfaces
++ * without custom feedback. Also updates the main device used for import
++ * checks.
++ *
++ * This is useful when the compositor's main render device changes at runtime.
++ */
++bool wlr_linux_dmabuf_v1_set_default_feedback(struct wlr_linux_dmabuf_v1 *linux_dmabuf,
++	const struct wlr_linux_dmabuf_feedback_v1 *feedback);
++
+ /**
+  * Set a surface's DMA-BUF feedback.
+  *
+diff --git a/types/wlr_linux_dmabuf_v1.c b/types/wlr_linux_dmabuf_v1.c
+index 3165e88..127c4d4 100644
+--- a/types/wlr_linux_dmabuf_v1.c
++++ b/types/wlr_linux_dmabuf_v1.c
+@@ -669,6 +669,10 @@ static void feedback_send(const struct wlr_linux_dmabuf_feedback_v1_compiled *fe
+ 	zwp_linux_dmabuf_feedback_v1_send_done(resource);
+ }
+ 
++static void default_feedback_handle_resource_destroy(struct wl_resource *resource) {
++	wl_list_remove(wl_resource_get_link(resource));
++}
++
+ static void linux_dmabuf_get_default_feedback(struct wl_client *client,
+ 		struct wl_resource *resource, uint32_t id) {
+ 	struct wlr_linux_dmabuf_v1 *linux_dmabuf =
+@@ -681,8 +685,12 @@ static void linux_dmabuf_get_default_feedback(struct wl_client *client,
+ 		wl_client_post_no_memory(client);
+ 		return;
+ 	}
++	// Track the resource so that the default feedback can be re-sent if it
++	// changes at runtime, see wlr_linux_dmabuf_v1_set_default_feedback()
+ 	wl_resource_set_implementation(feedback_resource, &linux_dmabuf_feedback_impl,
+-		NULL, NULL);
++		NULL, default_feedback_handle_resource_destroy);
++	wl_list_insert(&linux_dmabuf->default_feedback_resources,
++		wl_resource_get_link(feedback_resource));
+ 
+ 	feedback_send(linux_dmabuf->default_feedback, feedback_resource);
+ }
+@@ -866,6 +874,14 @@ static void linux_dmabuf_v1_destroy(struct wlr_linux_dmabuf_v1 *linux_dmabuf) {
+ 		surface_destroy(surface);
+ 	}
+ 
++	struct wl_resource *resource, *resource_tmp;
++	wl_resource_for_each_safe(resource, resource_tmp,
++			&linux_dmabuf->default_feedback_resources) {
++		struct wl_list *link = wl_resource_get_link(resource);
++		wl_list_remove(link);
++		wl_list_init(link);
++	}
++
+ 	compiled_feedback_destroy(linux_dmabuf->default_feedback);
+ 	wlr_drm_format_set_finish(&linux_dmabuf->default_formats);
+ 	if (linux_dmabuf->main_device_fd >= 0) {
+@@ -960,6 +976,7 @@ struct wlr_linux_dmabuf_v1 *wlr_linux_dmabuf_v1_create(struct wl_display *displa
+ 	linux_dmabuf->main_device_fd = -1;
+ 
+ 	wl_list_init(&linux_dmabuf->surfaces);
++	wl_list_init(&linux_dmabuf->default_feedback_resources);
+ 
+ 	wl_signal_init(&linux_dmabuf->events.destroy);
+ 
+@@ -1042,6 +1059,31 @@ bool wlr_linux_dmabuf_v1_set_surface_feedback(
+ 	return true;
+ }
+ 
++bool wlr_linux_dmabuf_v1_set_default_feedback(struct wlr_linux_dmabuf_v1 *linux_dmabuf,
++		const struct wlr_linux_dmabuf_feedback_v1 *feedback) {
++	if (!set_default_feedback(linux_dmabuf, feedback)) {
++		return false;
++	}
++
++	struct wl_resource *resource;
++	wl_resource_for_each(resource, &linux_dmabuf->default_feedback_resources) {
++		feedback_send(linux_dmabuf->default_feedback, resource);
++	}
++
++	// Surfaces with a custom feedback keep it, the others follow the default
++	struct wlr_linux_dmabuf_v1_surface *surface;
++	wl_list_for_each(surface, &linux_dmabuf->surfaces, link) {
++		if (surface->feedback != NULL) {
++			continue;
++		}
++		wl_resource_for_each(resource, &surface->feedback_resources) {
++			feedback_send(linux_dmabuf->default_feedback, resource);
++		}
++	}
++
++	return true;
++}
++
+ struct wlr_linux_dmabuf_feedback_v1_tranche *wlr_linux_dmabuf_feedback_add_tranche(
+ 		struct wlr_linux_dmabuf_feedback_v1 *feedback) {
+ 	struct wlr_linux_dmabuf_feedback_v1_tranche *tranche =

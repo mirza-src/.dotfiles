@@ -1,0 +1,507 @@
+diff --git a/kernel-open/nvidia-modeset/nvidia-modeset-linux.c b/kernel-open/nvidia-modeset/nvidia-modeset-linux.c
+index 62986c4..08e266c 100644
+--- a/kernel-open/nvidia-modeset/nvidia-modeset-linux.c
++++ b/kernel-open/nvidia-modeset/nvidia-modeset-linux.c
+@@ -129,6 +129,32 @@ MODULE_PARM_DESC(enhanced_pcon_support,
+ static bool enhanced_pcon_support = false;
+ module_param_named(enhanced_pcon_support, enhanced_pcon_support, bool, 0444);
+ 
++MODULE_PARM_DESC(mux_acpi_id,
++                 "ACPI _DOD id of the internal panel behind a dynamic display mux "
++                 "(0 = use the built-in table)");
++static uint mux_acpi_id = 0;
++module_param_named(mux_acpi_id, mux_acpi_id, uint, 0444);
++
++MODULE_PARM_DESC(mux_pre_flags,
++                 "Extra NV0073_CTRL_DFP_DISP_MUX_FLAGS OR'd into the pre-switch call");
++static uint mux_pre_flags = 0;
++module_param_named(mux_pre_flags, mux_pre_flags, uint, 0644);
++
++MODULE_PARM_DESC(mux_post_flags,
++                 "Extra NV0073_CTRL_DFP_DISP_MUX_FLAGS OR'd into the post-switch call");
++static uint mux_post_flags = 0;
++module_param_named(mux_post_flags, mux_post_flags, uint, 0644);
++
++MODULE_PARM_DESC(mux_igpu_brightness,
++                 "iGPU panel brightness (0-100) handed to RM on an iGPU->dGPU switch");
++static uint mux_igpu_brightness = 100;
++module_param_named(mux_igpu_brightness, mux_igpu_brightness, uint, 0644);
++
++MODULE_PARM_DESC(mux_force,
++                 "Continue a mux switch even if the pre-switch operations fail");
++static bool mux_force = false;
++module_param_named(mux_force, mux_force, bool, 0644);
++
+ /* Fail allocating the RM core channel for NVKMS using the i-th method (see
+  * FailAllocCoreChannelMethod). Failures not using the i-th method are ignored. */
+ MODULE_PARM_DESC(fail_alloc_core_channel, "Control testing for hardware core channel allocation failure");
+@@ -230,6 +256,32 @@ NvBool nvkms_enhanced_pcon_support(void)
+     return enhanced_pcon_support;
+ }
+ 
++NvU32 nvkms_mux_acpi_id(void)
++{
++    return mux_acpi_id;
++}
++
++NvU32 nvkms_mux_pre_flags(void)
++{
++    return READ_ONCE(mux_pre_flags);
++}
++
++NvU32 nvkms_mux_post_flags(void)
++{
++    return READ_ONCE(mux_post_flags);
++}
++
++NvU32 nvkms_mux_igpu_brightness(void)
++{
++    NvU32 b = READ_ONCE(mux_igpu_brightness);
++    return b > 100 ? 100 : b;
++}
++
++NvBool nvkms_mux_force(void)
++{
++    return READ_ONCE(mux_force);
++}
++
+ NvBool nvkms_output_rounding_fix(void)
+ {
+     return output_rounding_fix;
+@@ -873,6 +925,68 @@ static void nvkms_suspend(NvU32 gpuId)
+     up(&nvkms_lock);
+ }
+ 
++/*
++ * Dynamic display mux trigger: /sys/module/nvidia_modeset/parameters/mux
++ * Write "igpu" or "dgpu" to switch the internal panel; read for the state.
++ */
++static NvBool nvkms_mux_ready = NV_FALSE;
++
++static int nvkms_mux_set(const char *val, const struct kernel_param *kp)
++{
++    NvU32 state;
++    NvBool ok;
++
++    if (sysfs_streq(val, "dgpu") || sysfs_streq(val, "discrete")) {
++        state = 2; /* MUX_STATE_DISCRETE */
++    } else if (sysfs_streq(val, "igpu") || sysfs_streq(val, "integrated")) {
++        state = 1; /* MUX_STATE_INTEGRATED */
++    } else {
++        return -EINVAL;
++    }
++
++    if (!nvkms_mux_ready) {
++        /*
++         * Set at module load time (the locks aren't initialized yet), or
++         * during unload: nothing to switch.
++         */
++        return 0;
++    }
++
++    nvkms_read_lock_pm_lock();
++    down(&nvkms_lock);
++    /* Re-check under the lock: nvkms_exit() clears it before unloading. */
++    ok = nvkms_mux_ready && nvKmsSwitchInternalMux(state);
++    up(&nvkms_lock);
++    nvkms_read_unlock_pm_lock();
++
++    return ok ? 0 : (nvkms_mux_ready ? -EIO : -ENODEV);
++}
++
++static int nvkms_mux_get(char *buf, const struct kernel_param *kp)
++{
++    NvU32 state = 0;
++
++    if (nvkms_mux_ready) {
++        nvkms_read_lock_pm_lock();
++        down(&nvkms_lock);
++        if (nvkms_mux_ready)
++            state = nvKmsGetInternalMuxState();
++        up(&nvkms_lock);
++        nvkms_read_unlock_pm_lock();
++    }
++
++    return scnprintf(buf, PAGE_SIZE, "%s\n",
++                     state == 1 ? "igpu" : state == 2 ? "dgpu" : "unknown");
++}
++
++static const struct kernel_param_ops nvkms_mux_ops = {
++    .set = nvkms_mux_set,
++    .get = nvkms_mux_get,
++};
++module_param_cb(mux, &nvkms_mux_ops, NULL, 0644);
++MODULE_PARM_DESC(mux, "Dynamic display mux: write igpu|dgpu at runtime to switch the "
++                      "internal panel, read for the current state (ignored at load time)");
++
+ static void nvkms_resume(NvU32 gpuId)
+ {
+     down(&nvkms_lock);
+@@ -2201,6 +2315,7 @@ static int __init nvkms_init(void)
+         goto fail_module_load;
+     }
+     nvkms_read_config_file_locked();
++    nvkms_mux_ready = NV_TRUE;
+     up(&nvkms_lock);
+ 
+     nvkms_proc_init();
+@@ -2231,6 +2346,7 @@ static void __exit nvkms_exit(void)
+     nvkms_proc_exit();
+ 
+     down(&nvkms_lock);
++    nvkms_mux_ready = NV_FALSE;
+     nvKmsModuleUnload();
+     up(&nvkms_lock);
+ 
+diff --git a/kernel-open/nvidia-modeset/nvidia-modeset-os-interface.h b/kernel-open/nvidia-modeset/nvidia-modeset-os-interface.h
+index dc33314..d5d8abc 100644
+--- a/kernel-open/nvidia-modeset/nvidia-modeset-os-interface.h
++++ b/kernel-open/nvidia-modeset/nvidia-modeset-os-interface.h
+@@ -120,6 +120,11 @@ NvBool nvkms_test_fail_alloc_core_channel(enum NvKmsFailAllocCoreChannelMethod m
+ enum NvKmsFrlRateForce nvkms_force_frl_rate(void);
+ NvBool nvkms_conceal_vrr_caps(void);
+ NvBool nvkms_enhanced_pcon_support(void);
++NvU32 nvkms_mux_acpi_id(void);
++NvU32 nvkms_mux_pre_flags(void);
++NvU32 nvkms_mux_post_flags(void);
++NvU32 nvkms_mux_igpu_brightness(void);
++NvBool nvkms_mux_force(void);
+ NvBool nvkms_output_rounding_fix(void);
+ NvBool nvkms_disable_hdmi_frl(void);
+ NvBool nvkms_disable_vrr_memclk_switch(void);
+diff --git a/kernel-open/nvidia-modeset/nvkms.h b/kernel-open/nvidia-modeset/nvkms.h
+index d350ef7..63edf6d 100644
+--- a/kernel-open/nvidia-modeset/nvkms.h
++++ b/kernel-open/nvidia-modeset/nvkms.h
+@@ -88,6 +88,9 @@ void nvKmsModuleUnload(void);
+ void nvKmsSuspend(NvU32 gpuId);
+ void nvKmsResume(NvU32 gpuId);
+ 
++NvBool nvKmsSwitchInternalMux(NvU32 state);
++NvU32 nvKmsGetInternalMuxState(void);
++
+ void nvKmsGetProcFiles(const nvkms_procfs_file_t **ppProcFiles);
+ 
+ NvBool nvKmsReadConf(const char *buff, size_t size,
+diff --git a/kernel-open/nvidia/nv-acpi.c b/kernel-open/nvidia/nv-acpi.c
+index d0fe94a..e3faf71 100644
+--- a/kernel-open/nvidia/nv-acpi.c
++++ b/kernel-open/nvidia/nv-acpi.c
+@@ -851,6 +851,7 @@ NV_STATUS NV_API_CALL nv_acpi_ddc_method(
+             case 0x0118:
+             case 0x0400:
+             case 0xA420:
++            case 0xA450: /* ASUS ROG Zephyrus G14 GA403 (PI3WVR13612 mux) */
+                 lcd_dev_handle = handle;
+                 nv_printf(NV_DBG_INFO, "NVRM: %s Found LCD: %llx\n",
+                           __FUNCTION__, device_id);
+diff --git a/src/nvidia-modeset/exports_link_command.txt b/src/nvidia-modeset/exports_link_command.txt
+index 7606407..ecc83f0 100644
+--- a/src/nvidia-modeset/exports_link_command.txt
++++ b/src/nvidia-modeset/exports_link_command.txt
+@@ -1 +1 @@
+- --undefined=nvKmsIoctl --undefined=nvKmsClose --undefined=nvKmsOpen --undefined=nvKmsModuleLoad --undefined=nvKmsModuleUnload --undefined=nvKmsSuspend --undefined=nvKmsResume --undefined=nvKmsGetProcFiles --undefined=nvKmsReadConf --undefined=nvKmsKapiHandleEventQueueChange --undefined=nvKmsKapiGetFunctionsTableInternal --undefined=nvKmsKapiProbe --undefined=nvKmsKapiRemove --undefined=nvKmsKapiSuspendResume --undefined=nvKmsSetBacklight --undefined=nvKmsGetBacklight --undefined=nvKmsKapiF16ToF32Internal --undefined=nvKmsKapiF32ToF16Internal --undefined=nvKmsKapiF32MulInternal --undefined=nvKmsKapiF32DivInternal --undefined=nvKmsKapiF32AddInternal --undefined=nvKmsKapiF32ToUI32RMinMagInternal --undefined=nvKmsKapiUI32ToF32Internal
++ --undefined=nvKmsIoctl --undefined=nvKmsClose --undefined=nvKmsOpen --undefined=nvKmsModuleLoad --undefined=nvKmsModuleUnload --undefined=nvKmsSuspend --undefined=nvKmsResume --undefined=nvKmsSwitchInternalMux --undefined=nvKmsGetInternalMuxState --undefined=nvKmsGetProcFiles --undefined=nvKmsReadConf --undefined=nvKmsKapiHandleEventQueueChange --undefined=nvKmsKapiGetFunctionsTableInternal --undefined=nvKmsKapiProbe --undefined=nvKmsKapiRemove --undefined=nvKmsKapiSuspendResume --undefined=nvKmsSetBacklight --undefined=nvKmsGetBacklight --undefined=nvKmsKapiF16ToF32Internal --undefined=nvKmsKapiF32ToF16Internal --undefined=nvKmsKapiF32MulInternal --undefined=nvKmsKapiF32DivInternal --undefined=nvKmsKapiF32AddInternal --undefined=nvKmsKapiF32ToUI32RMinMagInternal --undefined=nvKmsKapiUI32ToF32Internal
+diff --git a/src/nvidia-modeset/os-interface/include/nvidia-modeset-os-interface.h b/src/nvidia-modeset/os-interface/include/nvidia-modeset-os-interface.h
+index dc33314..d5d8abc 100644
+--- a/src/nvidia-modeset/os-interface/include/nvidia-modeset-os-interface.h
++++ b/src/nvidia-modeset/os-interface/include/nvidia-modeset-os-interface.h
+@@ -120,6 +120,11 @@ NvBool nvkms_test_fail_alloc_core_channel(enum NvKmsFailAllocCoreChannelMethod m
+ enum NvKmsFrlRateForce nvkms_force_frl_rate(void);
+ NvBool nvkms_conceal_vrr_caps(void);
+ NvBool nvkms_enhanced_pcon_support(void);
++NvU32 nvkms_mux_acpi_id(void);
++NvU32 nvkms_mux_pre_flags(void);
++NvU32 nvkms_mux_post_flags(void);
++NvU32 nvkms_mux_igpu_brightness(void);
++NvBool nvkms_mux_force(void);
+ NvBool nvkms_output_rounding_fix(void);
+ NvBool nvkms_disable_hdmi_frl(void);
+ NvBool nvkms_disable_vrr_memclk_switch(void);
+diff --git a/src/nvidia-modeset/os-interface/include/nvkms.h b/src/nvidia-modeset/os-interface/include/nvkms.h
+index d350ef7..63edf6d 100644
+--- a/src/nvidia-modeset/os-interface/include/nvkms.h
++++ b/src/nvidia-modeset/os-interface/include/nvkms.h
+@@ -88,6 +88,9 @@ void nvKmsModuleUnload(void);
+ void nvKmsSuspend(NvU32 gpuId);
+ void nvKmsResume(NvU32 gpuId);
+ 
++NvBool nvKmsSwitchInternalMux(NvU32 state);
++NvU32 nvKmsGetInternalMuxState(void);
++
+ void nvKmsGetProcFiles(const nvkms_procfs_file_t **ppProcFiles);
+ 
+ NvBool nvKmsReadConf(const char *buff, size_t size,
+diff --git a/src/nvidia-modeset/src/nvkms-rm.c b/src/nvidia-modeset/src/nvkms-rm.c
+index 7ad713b..5fec910 100644
+--- a/src/nvidia-modeset/src/nvkms-rm.c
++++ b/src/nvidia-modeset/src/nvkms-rm.c
+@@ -5620,7 +5620,9 @@ static void MuxInit(const NVDpyEvoRec *pDpyEvo)
+ 
+         /* Map with hard-coded data for systems known to support dynamic mux
+          * switching. This is a poor-man's alternative to the WDDM driver's
+-         * CDisplayMgr::NVInitializeACPIToDeviceMaskMap() */
++         * CDisplayMgr::NVInitializeACPIToDeviceMaskMap(). The mux_acpi_id
++         * module parameter replaces it with the panel's real ACPI id, mapped
++         * to this connector. */
+         NV0073_CTRL_SPECIFIC_SET_ACPI_ID_MAPPING_PARAMS acpiMap = {
+             .mapTable = {
+                 {.acpiId = 0x8001a420, .displayId = 0x1000, .dodIndex = 0},
+@@ -5630,6 +5632,16 @@ static void MuxInit(const NVDpyEvoRec *pDpyEvo)
+         NVParsedEdidEvoRec *pParsedEdid = NULL;
+         NVEvoInfoStringRec infoString;
+ 
++        if (nvkms_mux_acpi_id() != 0) {
++            acpiMap.mapTable[0].acpiId = nvkms_mux_acpi_id();
++            acpiMap.mapTable[0].displayId = params.displayId;
++            acpiMap.mapTable[0].dodIndex = 0;
++            nvEvoLogDisp(pDispEvo, EVO_LOG_INFO,
++                         "mux: mapping ACPI id 0x%08x to %s (displayId 0x%x)",
++                         acpiMap.mapTable[0].acpiId, pDpyEvo->name,
++                         params.displayId);
++        }
++
+         ret = nvRmApiControl(nvEvoGlobal.clientHandle,
+                              pDevEvo->displayCommonHandle,
+                              NV0073_CTRL_CMD_SPECIFIC_SET_ACPI_ID_MAPPING,
+@@ -5664,6 +5676,11 @@ edid_done:
+ 
+         /* Internal mux initialization will fail without manfId/productId */
+         if (!params.manfId || !params.productId) {
++            if (nvkms_mux_acpi_id() != 0) {
++                nvEvoLogDisp(pDispEvo, EVO_LOG_WARN,
++                             "mux: could not read %s EDID via ACPI _DDC",
++                             pDpyEvo->name);
++            }
+             return;
+         }
+     }
+@@ -5677,7 +5694,17 @@ edid_done:
+     if (ret == NVOS_STATUS_SUCCESS) {
+         pDispEvo->muxDisplays = nvAddDpyIdToDpyIdList(pDpyEvo->id,
+                                                       pDispEvo->muxDisplays);
++        if (nvkms_mux_acpi_id() != 0) {
++            nvEvoLogDisp(pDispEvo, EVO_LOG_INFO,
++                         "mux: dynamic display mux initialized on %s",
++                         pDpyEvo->name);
++        }
+     } else {
++        if (nvkms_mux_acpi_id() != 0) {
++            nvEvoLogDisp(pDispEvo, EVO_LOG_WARN,
++                         "mux: INIT_MUX_DATA failed on %s (0x%x)",
++                         pDpyEvo->name, ret);
++        }
+         nvEvoLogDebug(EVO_LOG_ERROR, "Failed to initialize mux on %s.",
+                       pDpyEvo->name);
+     }
+@@ -5704,6 +5731,11 @@ void nvRmMuxInit(NVDevEvoPtr pDevEvo)
+         NVDpyIdList validMuxDpys = GetValidMuxDpys(pDispEvo);
+         NVDpyEvoPtr pDpyEvo;
+ 
++        if (nvkms_mux_acpi_id() != 0 && nvDpyIdListIsEmpty(validMuxDpys)) {
++            nvEvoLogDisp(pDispEvo, EVO_LOG_WARN,
++                         "mux: RM reports no displays behind a mux");
++        }
++
+         FOR_ALL_EVO_DPYS(pDpyEvo, validMuxDpys, pDispEvo) {
+             MuxInit(pDpyEvo);
+         }
+@@ -5733,7 +5765,6 @@ NvBool nvRmMuxPre(const NVDpyEvoRec *pDpyEvo, NvMuxState state)
+     }
+ 
+     params.displayId = nvDpyIdToNvU32(pDpyEvo->pConnectorEvo->displayId);
+-    params.flags = DRF_DEF(0073_CTRL_DFP, _DISP_MUX_FLAGS, _SR_ENTER_SKIP, _NO);
+ 
+     if (state == MUX_STATE_DISCRETE) {
+         params.flags = NV0073_CTRL_DFP_DISP_MUX_FLAGS_SWITCH_TYPE_IGPU_TO_DGPU;
+@@ -5743,12 +5774,35 @@ NvBool nvRmMuxPre(const NVDpyEvoRec *pDpyEvo, NvMuxState state)
+         return FALSE;
+     }
+ 
++    /*
++     * On systems enabled through mux_acpi_id, skip RM's PSR entry in both
++     * directions: on iGPU->dGPU RM has no link to the panel yet, and on
++     * dGPU->iGPU the Linux driver never enabled PSR on the panel, so RM
++     * rejects the request with NV_ERR_NOT_SUPPORTED. Also hand over the iGPU
++     * brightness. Otherwise the flags stay as upstream sends them.
++     */
++    if (nvkms_mux_acpi_id() != 0) {
++        params.flags |=
++            DRF_DEF(0073_CTRL_DFP, _DISP_MUX_FLAGS, _SR_ENTER_SKIP, _YES);
++        if (state == MUX_STATE_DISCRETE) {
++            params.iGpuBrightness = nvkms_mux_igpu_brightness();
++        }
++    }
++    params.flags |= nvkms_mux_pre_flags();
++
+     ret = nvRmApiControl(nvEvoGlobal.clientHandle,
+                          pDevEvo->displayCommonHandle,
+                          NV0073_CTRL_CMD_DFP_RUN_PRE_DISP_MUX_OPERATIONS,
+                          &params, sizeof(params));
+ 
+     nvEvoLogDebug(EVO_LOG_INFO, "RmMuxPre status %d", ret);
++    if (nvkms_mux_acpi_id() != 0) {
++        nvEvoLogDisp(pDispEvo, EVO_LOG_INFO,
++                     "mux: pre flags=0x%x brightness=%u -> status 0x%x "
++                     "(ops %u ms, psr %u ms)",
++                     params.flags, params.iGpuBrightness, ret,
++                     params.preOpsLatencyMs, params.psrEntryLatencyMs);
++    }
+ 
+     return ret == NVOS_STATUS_SUCCESS;
+ }
+@@ -5791,6 +5845,10 @@ NvBool nvRmMuxSwitch(const NVDpyEvoRec *pDpyEvo, NvMuxState state)
+                          &params, sizeof(params));
+ 
+     nvEvoLogDebug(EVO_LOG_INFO, "RmMuxSwitch status %d", ret);
++    if (nvkms_mux_acpi_id() != 0) {
++        nvEvoLogDisp(pDispEvo, EVO_LOG_INFO,
++                     "mux: switch flags=0x%x -> status 0x%x", params.flags, ret);
++    }
+ 
+     /*
+      * Force link training after waiting for the DP AUX link to settle.
+@@ -5831,7 +5889,6 @@ NvBool nvRmMuxPost(const NVDpyEvoRec *pDpyEvo, NvMuxState state)
+     }
+ 
+     params.displayId = nvDpyIdToNvU32(pDpyEvo->pConnectorEvo->displayId);
+-    params.flags = DRF_DEF(0073_CTRL_DFP, _DISP_MUX_FLAGS, _SR_ENTER_SKIP, _NO);
+ 
+     if (state == MUX_STATE_DISCRETE) {
+         params.flags = NV0073_CTRL_DFP_DISP_MUX_FLAGS_SWITCH_TYPE_IGPU_TO_DGPU;
+@@ -5841,12 +5898,30 @@ NvBool nvRmMuxPost(const NVDpyEvoRec *pDpyEvo, NvMuxState state)
+         return FALSE;
+     }
+ 
++    /*
++     * PSR exit belongs to the GPU that now drives the panel: RM on
++     * iGPU->dGPU, the iGPU driver on dGPU->iGPU. On systems enabled through
++     * mux_acpi_id, skip RM's PSR exit for the latter; otherwise keep the
++     * flags as upstream sends them.
++     */
++    if ((nvkms_mux_acpi_id() != 0) && (state == MUX_STATE_INTEGRATED)) {
++        params.flags |=
++            DRF_DEF(0073_CTRL_DFP, _DISP_MUX_FLAGS, _SR_EXIT_SKIP, _YES);
++    }
++    params.flags |= nvkms_mux_post_flags();
++
+     ret = nvRmApiControl(nvEvoGlobal.clientHandle,
+                          pDevEvo->displayCommonHandle,
+                          NV0073_CTRL_CMD_DFP_RUN_POST_DISP_MUX_OPERATIONS,
+                          &params, sizeof(params));
+ 
+     nvEvoLogDebug(EVO_LOG_INFO, "RmMuxPost status %d", ret);
++    if (nvkms_mux_acpi_id() != 0) {
++        nvEvoLogDisp(pDispEvo, EVO_LOG_INFO,
++                     "mux: post flags=0x%x -> status 0x%x (ops %u ms, psr exit %u ms)",
++                     params.flags, ret, params.postOpsLatencyMs,
++                     params.psrExitLatencyMs);
++    }
+ 
+     return ret == NVOS_STATUS_SUCCESS;
+ }
+diff --git a/src/nvidia-modeset/src/nvkms.c b/src/nvidia-modeset/src/nvkms.c
+index 4f9b65b..a852e6b 100644
+--- a/src/nvidia-modeset/src/nvkms.c
++++ b/src/nvidia-modeset/src/nvkms.c
+@@ -52,6 +52,7 @@
+ #include "class/clcb70.h" /* NVCB70_DISPLAY */
+ 
+ #include "dp/nvdp-connector.h"
++#include "dp/nvdp-timer.h"
+ 
+ #include "nvUnixVersion.h" /* NV_VERSION_STRING */
+ #include <class/cl0000.h> /* NV01_NULL_OBJECT/NV01_ROOT */
+@@ -4307,6 +4308,92 @@ static NvBool SwitchMux(
+     }
+ }
+ 
++static NVDpyEvoPtr FindInternalMuxDpy(void)
++{
++    NVDevEvoPtr pDevEvo;
++
++    FOR_ALL_EVO_DEVS(pDevEvo) {
++        NVDispEvoPtr pDispEvo;
++        int i;
++
++        FOR_ALL_EVO_DISPLAYS(pDispEvo, i, pDevEvo) {
++            NVDpyEvoPtr pDpyEvo;
++
++            FOR_ALL_EVO_DPYS(pDpyEvo, pDispEvo->muxDisplays, pDispEvo) {
++                if (pDpyEvo->internal) {
++                    return pDpyEvo;
++                }
++            }
++        }
++    }
++
++    return NULL;
++}
++
++/*
++ * Kernel-side equivalent of NVKMS_IOCTL_SWITCH_MUX PRE/SWITCH/POST for the
++ * internal panel. nvidia-drm holds modeset ownership, so a userspace NVKMS
++ * client cannot issue the ioctl itself. Called with the pm read lock and
++ * nvkms_lock held.
++ */
++NvBool nvKmsSwitchInternalMux(NvU32 state)
++{
++    const NvMuxState muxState = (NvMuxState)state;
++    NVDpyEvoPtr pDpyEvo = FindInternalMuxDpy();
++    NvBool ok;
++
++    if (pDpyEvo == NULL) {
++        nvEvoLog(EVO_LOG_WARN, "mux: no internal display behind a dynamic mux");
++        return FALSE;
++    }
++
++    if (nvRmMuxState(pDpyEvo) == muxState) {
++        return TRUE;
++    }
++
++    if (!nvRmMuxPre(pDpyEvo, muxState)) {
++        if (!nvkms_mux_force()) {
++            nvEvoLogDisp(pDpyEvo->pDispEvo, EVO_LOG_WARN,
++                         "mux: pre-switch failed (set mux_force=1 to continue anyway)");
++            return FALSE;
++        }
++        nvEvoLogDisp(pDpyEvo->pDispEvo, EVO_LOG_WARN,
++                     "mux: pre-switch failed, continuing (mux_force)");
++    }
++
++    ok = nvRmMuxSwitch(pDpyEvo, muxState);
++    if (!ok) {
++        nvEvoLogDisp(pDpyEvo->pDispEvo, EVO_LOG_WARN, "mux: switch failed");
++    }
++
++    /* Run post even after a failed switch: it restores the panel power and
++     * backlight control that pre took over. */
++    if (!nvRmMuxPost(pDpyEvo, muxState)) {
++        nvEvoLogDisp(pDpyEvo->pDispEvo, EVO_LOG_WARN, "mux: post-switch failed");
++        ok = FALSE;
++    }
++
++    /* The panel left this GPU: tell DPLib so the connector reads disconnected. */
++    if (ok && muxState == MUX_STATE_INTEGRATED &&
++        nvConnectorUsesDPLib(pDpyEvo->pConnectorEvo)) {
++        nvDPNotifyLongPulse(pDpyEvo->pConnectorEvo, FALSE);
++        nvDPFireExpiredTimers(pDpyEvo->pDispEvo->pDevEvo);
++    }
++
++    nvEvoLogDisp(pDpyEvo->pDispEvo, EVO_LOG_INFO, "mux: %s -> %s %s",
++                 pDpyEvo->name,
++                 muxState == MUX_STATE_DISCRETE ? "dGPU" : "iGPU",
++                 ok ? "ok" : "FAILED");
++    return ok;
++}
++
++NvU32 nvKmsGetInternalMuxState(void)
++{
++    NVDpyEvoPtr pDpyEvo = FindInternalMuxDpy();
++
++    return pDpyEvo ? (NvU32)nvRmMuxState(pDpyEvo) : (NvU32)MUX_STATE_UNKNOWN;
++}
++
+ static NvBool GetMuxState(
+     struct NvKmsPerOpen *pOpen,
+     void *pParamsVoid)

@@ -1,0 +1,988 @@
+diff --git a/docs/bindings/keys.md b/docs/bindings/keys.md
+index 4d60d0a2..2afa0976 100644
+--- a/docs/bindings/keys.md
++++ b/docs/bindings/keys.md
+@@ -201,6 +201,7 @@ It is formed by tag numbers `1`–`9`, optionally combined with `|`.
+ | `enteroverview` | - | Enter overview mode. |
+ | `leaveoverview` | - | Leave overview mode. |
+ | `togglejump` | - | Toggle overview with jump mode. |
++| `setrendergpu` | `card\|renderD\|/dev/dri/path\|recreate` | Make another GPU the rendering GPU, or rebuild the renderer (`recreate`). See [monitors](/docs/configuration/monitors#switching-the-rendering-gpu-at-runtime). |
+ | `create_virtual_output` | - | Create a headless monitor (for VNC/Sunshine). |
+ | `destroy_all_virtual_output` | - | Destroy all virtual monitors. |
+ | `toggleoverlay` | - | Toggle overlay state for the focused window. |
+diff --git a/docs/configuration/monitors.md b/docs/configuration/monitors.md
+index a6f4dec7..83c72466 100644
+--- a/docs/configuration/monitors.md
++++ b/docs/configuration/monitors.md
+@@ -157,6 +157,24 @@ all of them — if anything is on, everything goes off — rather than flipping
+ output against its own state. Outputs that cannot do HDR are skipped without
+ their state being touched.
+ 
++### Switching the rendering GPU at runtime
++
++`setrendergpu` makes another DRM device the primary (rendering) GPU and
++rebuilds the renderer on it. It needs a wlroots with dynamic primary GPU
++support (`WLR_DRM_HAS_DYNAMIC_PRIMARY`); otherwise it only logs an error.
++`recreate` rebuilds the renderer on the current GPU and works with any wlroots.
++
++```sh
++mmsg dispatch setrendergpu,card1             # card or render node name
++mmsg dispatch setrendergpu,/dev/dri/renderD128
++mmsg dispatch setrendergpu,recreate
++```
++
++With `WLR_DRM_DYNAMIC_PRIMARY=1` in the environment, wlroots does this on its
++own when outputs are hot-plugged (e.g. a display mux moving the internal panel
++to the other GPU). `MANGO_LOG_LEVEL=info` (or `debug`) makes wlroots log those
++switches without the full output of `-d`.
++
+ ### Mastering display metadata
+ 
+ `hdr:1` alone declares BT.2020 primaries and the PQ transfer function, but leaves
+diff --git a/include/mango/common/server.h b/include/mango/common/server.h
+index 8d298e37..92dbbac6 100644
+--- a/include/mango/common/server.h
++++ b/include/mango/common/server.h
+@@ -53,6 +53,10 @@ struct MangoServer {
+ 	struct wlr_renderer *renderer;
+ 	struct wlr_allocator *allocator;
+ 	struct wlr_compositor *compositor;
++	/* Kept so the default dmabuf feedback can follow a renderer that was
++	 * recreated on another GPU (see do_renderer_recreate). May be NULL. */
++	struct wlr_linux_dmabuf_v1 *linux_dmabuf;
++	struct wlr_linux_drm_syncobj_manager_v1 *syncobj_manager;
+ 
+ 	/* wlroots globals */
+ 	struct wlr_xdg_shell *xdg_shell;
+@@ -213,6 +217,9 @@ struct MangoServer {
+ 	struct wl_listener cursor_motion_absolute_listener;
+ 	struct wl_listener gpu_reset_listener;
+ 	struct wl_event_source *recreate_renderer_source;
++	struct wl_event_source *recreate_renderer_timer;
++	bool recreate_renderer_retrying;
++	int32_t recreate_renderer_attempts;
+ 	struct wl_listener layout_change_listener;
+ 	struct wl_listener new_idle_inhibitor_listener;
+ 	struct wl_listener new_input_device_listener;
+diff --git a/include/mango/common/types.h b/include/mango/common/types.h
+index f03f9326..d4e387d2 100644
+--- a/include/mango/common/types.h
++++ b/include/mango/common/types.h
+@@ -94,6 +94,8 @@ struct wlr_pointer_gestures_v1;
+ struct wlr_pointer_swipe_end_event;
+ struct wlr_relative_pointer_manager_v1;
+ struct wlr_renderer;
++struct wlr_linux_dmabuf_v1;
++struct wlr_linux_drm_syncobj_manager_v1;
+ struct wlr_scene;
+ struct wlr_scene_blur;
+ struct wlr_scene_buffer;
+diff --git a/include/mango/config/parse.h b/include/mango/config/parse.h
+index 465ad2a1..1da1ac6a 100644
+--- a/include/mango/config/parse.h
++++ b/include/mango/config/parse.h
+@@ -688,6 +688,7 @@ bool parse_config(void);
+ void reset_blur_params(void);
+ 
+ void reapply_monitor_rules(void);
++void reapply_monitor_rule(Monitor *m);
+ 
+ void set_xcursor_env();
+ 
+diff --git a/include/mango/dispatch/bind.h b/include/mango/dispatch/bind.h
+index 46a4114e..7d319f15 100644
+--- a/include/mango/dispatch/bind.h
++++ b/include/mango/dispatch/bind.h
+@@ -43,6 +43,7 @@ int32_t enter_overview(const Arg *arg);
+ int32_t leave_overview(const Arg *arg);
+ int32_t switcher(const Arg *arg);
+ int32_t toggle_hdr(const Arg *arg);
++int32_t set_render_gpu(const Arg *arg);
+ int32_t toggle_jump(const Arg *arg);
+ int32_t set_proportion(const Arg *arg);
+ int32_t switch_proportion_preset(const Arg *arg);
+diff --git a/include/mango/manage/client.h b/include/mango/manage/client.h
+index 81d66dfb..14952486 100644
+--- a/include/mango/manage/client.h
++++ b/include/mango/manage/client.h
+@@ -482,6 +482,7 @@ void mango_surface_frame_done(struct wlr_surface *surface, int sx, int sy,
+ // disabled nodes (wlr_scene.c scene_node_for_each_scene_buffer), so no surface
+ // gets fed and ordinary windows would stall without frame callbacks.
+ void client_send_frame_done(Client *c, const struct timespec *now);
++void client_reset_image_capture(Client *c);
+ bool client_force_render(Client *c);
+ 
+ /* Returns the monitor of the current XWayland client (falls back to the
+diff --git a/include/mango/manage/monitor.h b/include/mango/manage/monitor.h
+index 31826906..cfff42a4 100644
+--- a/include/mango/manage/monitor.h
++++ b/include/mango/manage/monitor.h
+@@ -87,6 +87,12 @@ struct Monitor {
+ 	bool vrr_enable_failed;
+ 	bool hdr_enable;
+ 	bool prefer_disable;
++	/* The first enable commit failed (e.g. the output appeared on a GPU the
++	 * current renderer cannot feed). Retried after the renderer moves. */
++	bool enable_failed;
++	uint32_t created_ms;   /* get_now_in_ms() when the output appeared */
++	bool has_been_enabled; /* the output was enabled at least once */
++	bool tags_handed_off;  /* its tags were passed on since last enabled */
+ 	bool is_hdr_enabling;
+ 	// Mastering display metadata, in cd/m². 0 = unset, see output_enable_hdr().
+ 	float hdr_min_lum;
+diff --git a/src/config/binding_parse.c b/src/config/binding_parse.c
+index ed3c9bea..6c4153b0 100644
+--- a/src/config/binding_parse.c
++++ b/src/config/binding_parse.c
+@@ -549,6 +549,10 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
+ 		(*arg).i = parse_circle_direction(arg_value);
+ 	} else if (strcmp(func_name, "toggleglobal") == 0) {
+ 		func = toggle_global;
++	} else if (strcmp(func_name, "setrendergpu") == 0) {
++		/* setrendergpu,<card0|renderD128|/dev/dri/cardN|recreate> */
++		func = set_render_gpu;
++		(*arg).v = strdup(arg_value);
+ 	} else if (strcmp(func_name, "togglehdr") == 0) {
+ 		/* togglehdr[,on|off|toggle][,<monitor name>|all] */
+ 		func = toggle_hdr;
+diff --git a/src/config/reapply.c b/src/config/reapply.c
+index 19c0d95e..2cccff5e 100644
+--- a/src/config/reapply.c
++++ b/src/config/reapply.c
+@@ -214,77 +214,81 @@ void reset_blur_params(void) {
+ 	}
+ }
+ 
+-void reapply_monitor_rules(void) {
+-	Monitor *m = NULL;
+-	int32_t ji;
++/* Applies @m's monitor rule; callers run handle_output_layout_change() once
++ * afterwards. */
++static void apply_monitor_rule(Monitor *m) {
++	ConfigMonitorRule *mr = NULL;
++	bool was_enabled = m->wlr_output->enabled;
++
++	/* Match disabled outputs too, so a rule can re-enable them. */
++	for (int32_t ji = config.monitor_rules_count - 1; ji >= 0; ji--) {
++		if (monitor_matches_rule(m, &config.monitor_rules[ji])) {
++			mr = &config.monitor_rules[ji];
++			break;
++		}
++	}
+ 
+-	wl_list_for_each(m, &server.monitors, link) {
+-		ConfigMonitorRule *mr = NULL;
+-		bool was_enabled = m->wlr_output->enabled;
+-
+-		/* Match disabled outputs too, so a rule can re-enable them. */
+-		for (ji = config.monitor_rules_count - 1; ji >= 0; ji--) {
+-			if (monitor_matches_rule(m, &config.monitor_rules[ji])) {
+-				mr = &config.monitor_rules[ji];
+-				break;
+-			}
++	if (mr)
++		apply_rule_to_state(m, mr, &m->pending);
++	else
++		/* No rule matches: same default as a new output, enabled. */
++		wlr_output_state_set_enabled(&m->pending, true);
++
++	/* Enable the output first so it can safely enter the layout:
++	 * adding a still-disabled output re-enters
++	 * handle_output_layout_change and crashes. */
++	if (m->pending.enabled && !m->wlr_output->enabled &&
++		!mango_scene_output_commit(m->scene_output, &m->pending))
++		return;
++
++	if (mr && m->wlr_output->enabled) {
++		if (mr->x == INT32_MAX && mr->y == INT32_MAX) {
++			if (!was_enabled)
++				wlr_output_layout_add_auto(server.output_layout, m->wlr_output);
++		} else {
++			int32_t mx = mr->x == INT32_MAX ? m->m.x : mr->x;
++			int32_t my = mr->y == INT32_MAX ? m->m.y : mr->y;
++			wlr_output_layout_add(server.output_layout, m->wlr_output, mx, my);
+ 		}
++	}
+ 
+-		if (mr)
+-			apply_rule_to_state(m, mr, &m->pending);
+-		else
+-			/* No rule matches: same default as a new output, enabled. */
+-			wlr_output_state_set_enabled(&m->pending, true);
+-
+-		/* Enable the output first so it can safely enter the layout:
+-		 * adding a still-disabled output re-enters
+-		 * handle_output_layout_change and crashes. */
+-		if (m->pending.enabled && !m->wlr_output->enabled &&
+-			!mango_scene_output_commit(m->scene_output, &m->pending))
+-			continue;
++	/* Image descriptions only take effect in a scene commit that
++	 * carries a buffer, so HDR is applied after the output is in the
++	 * layout. */
++	bool was_hdr = m->is_hdr_enabling;
++	if (m->hdr_enable) {
++		output_state_setup_hdr(m, false, &m->pending);
++	} else {
++		output_enable_hdr(m, &m->pending, false, false);
++	}
+ 
+-		if (mr && m->wlr_output->enabled) {
+-			if (mr->x == INT32_MAX && mr->y == INT32_MAX) {
+-				if (!was_enabled)
+-					wlr_output_layout_add_auto(server.output_layout,
+-											   m->wlr_output);
+-			} else {
+-				int32_t mx = mr->x == INT32_MAX ? m->m.x : mr->x;
+-				int32_t my = mr->y == INT32_MAX ? m->m.y : mr->y;
+-				wlr_output_layout_add(server.output_layout, m->wlr_output, mx,
+-									  my);
+-			}
+-		}
++	if (m->is_hdr_enabling != was_hdr) {
++		m->pending.allow_reconfiguration = true;
++		if (m->scene_output)
++			wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
++	}
+ 
+-		/* Image descriptions only take effect in a scene commit that
+-		 * carries a buffer, so HDR is applied after the output is in the
+-		 * layout. */
+-		bool was_hdr = m->is_hdr_enabling;
++	if (!(mango_scene_output_commit(m->scene_output, &m->pending))) {
+ 		if (m->hdr_enable) {
+-			output_state_setup_hdr(m, false, &m->pending);
+-		} else {
+-			output_enable_hdr(m, &m->pending, false, false);
++			output_state_setup_hdr(m, true, &m->pending);
+ 		}
++	}
+ 
+-		if (m->is_hdr_enabling != was_hdr) {
+-			m->pending.allow_reconfiguration = true;
+-			if (m->scene_output)
+-				wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
+-		}
++	/* After scale/mode changes, force one frame so wl_output events are
++	 * sent. */
++	wlr_output_schedule_frame(m->wlr_output);
++	wlr_output_effective_resolution(m->wlr_output, &m->m.width, &m->m.height);
++}
+ 
+-		if (!(mango_scene_output_commit(m->scene_output, &m->pending))) {
+-			if (m->hdr_enable) {
+-				output_state_setup_hdr(m, true, &m->pending);
+-			}
+-		}
++void reapply_monitor_rule(Monitor *m) {
++	apply_monitor_rule(m);
++	handle_output_layout_change(NULL, NULL);
++}
+ 
+-		/* After scale/mode changes, force one frame so wl_output events are
+-		 * sent. */
+-		wlr_output_schedule_frame(m->wlr_output);
+-		wlr_output_effective_resolution(m->wlr_output, &m->m.width,
+-										&m->m.height);
+-	}
++void reapply_monitor_rules(void) {
++	Monitor *m = NULL;
+ 
++	wl_list_for_each(m, &server.monitors, link) { apply_monitor_rule(m); }
+ 	handle_output_layout_change(NULL, NULL);
+ }
+ 
+diff --git a/src/main.c b/src/main.c
+index 8c785737..6796810c 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -247,6 +247,15 @@ void cleanup(void) {
+ 	config_watcher_destroy();
+ 	config_error_nag_destroy();
+ 	cleanup_listeners();
++	/* A renderer recreation may still be pending */
++	if (server.recreate_renderer_source) {
++		wl_event_source_remove(server.recreate_renderer_source);
++		server.recreate_renderer_source = NULL;
++	}
++	if (server.recreate_renderer_timer) {
++		wl_event_source_remove(server.recreate_renderer_timer);
++		server.recreate_renderer_timer = NULL;
++	}
+ #ifdef XWAYLAND
+ 	wlr_xwayland_destroy(server.xwayland);
+ 	server.xwayland = NULL;
+@@ -472,6 +481,12 @@ void setup(void) {
+ 	parse_config();
+ 	if (server.cli_debug_log) {
+ 		config.log_level = WLR_DEBUG;
++	} else {
++		const char *lvl = getenv("MANGO_LOG_LEVEL");
++		if (lvl && strcmp(lvl, "info") == 0)
++			config.log_level = WLR_INFO;
++		else if (lvl && strcmp(lvl, "debug") == 0)
++			config.log_level = WLR_DEBUG;
+ 	}
+ 	init_baked_points();
+ 
+@@ -599,16 +614,23 @@ void setup(void) {
+ 
+ 	if (wlr_renderer_get_texture_formats(server.renderer,
+ 										 WLR_BUFFER_CAP_DMABUF)) {
++		/* wl_drm is legacy and advertises the render node of the renderer
++		 * it was created with. wlroots offers no way to destroy or update
++		 * it, so after a renderer migration to another GPU it keeps
++		 * pointing at the old node; current Mesa uses the linux-dmabuf
++		 * feedback main device instead, which is kept up to date. */
+ 		wlr_drm_create(server.display, server.renderer);
+-		wlr_scene_set_linux_dmabuf_v1(server.scene,
+-									  wlr_linux_dmabuf_v1_create_with_renderer(
+-										  server.display, 4, server.renderer));
++		server.linux_dmabuf = wlr_linux_dmabuf_v1_create_with_renderer(
++			server.display, 4, server.renderer);
++		if (server.linux_dmabuf)
++			wlr_scene_set_linux_dmabuf_v1(server.scene, server.linux_dmabuf);
+ 	}
+ 
+ 	if (config.syncobj_enable &&
+ 		(drm_fd = wlr_renderer_get_drm_fd(server.renderer)) >= 0 &&
+ 		server.renderer->features.timeline && server.backend->features.timeline)
+-		wlr_linux_drm_syncobj_manager_v1_create(server.display, 1, drm_fd);
++		server.syncobj_manager =
++			wlr_linux_drm_syncobj_manager_v1_create(server.display, 1, drm_fd);
+ 
+ 	/* Create a default allocator */
+ 	if (!(server.allocator =
+diff --git a/src/manage/client.c b/src/manage/client.c
+index bb157060..766f653f 100644
+--- a/src/manage/client.c
++++ b/src/manage/client.c
+@@ -2316,6 +2316,21 @@ static void client_negotiate_initial_size(Client *c, Monitor *rule_mon,
+ 	c->tags = saved_tags;
+ }
+ 
++/* Mirror @c's surface into its own scene, the source for ext image capture. */
++static void client_create_image_capture_scene(Client *c) {
++	c->image_capture_scene = wlr_scene_create();
++	if (!c->image_capture_scene)
++		return;
++
++	if (client_is_x11(c)) {
++		c->image_capture_scene_surface = wlr_scene_surface_create(
++			&c->image_capture_scene->tree, client_surface(c));
++	} else {
++		c->image_capture_tree = wlr_scene_xdg_surface_create(
++			&c->image_capture_scene->tree, c->surface.xdg);
++	}
++}
++
+ void handle_client_map(struct wl_listener *listener, void *data) {
+ 	/* Called when the surface is mapped, or ready to display on-screen. */
+ 	Client *c = wl_container_of(listener, c, map);
+@@ -2370,19 +2385,11 @@ void handle_client_map(struct wl_listener *listener, void *data) {
+ 		.title = wayland_string_set(&title, client_get_title(c)),
+ 	};
+ 
+-	c->image_capture_scene = wlr_scene_create();
++	client_create_image_capture_scene(c);
+ 	c->ext_foreign_toplevel = wlr_ext_foreign_toplevel_handle_v1_create(
+ 		server.foreign_toplevel_list, &foreign_toplevel_state);
+ 	c->ext_foreign_toplevel->data = c;
+ 
+-	if (client_is_x11(c)) {
+-		c->image_capture_scene_surface = wlr_scene_surface_create(
+-			&c->image_capture_scene->tree, client_surface(c));
+-	} else {
+-		c->image_capture_tree = wlr_scene_xdg_surface_create(
+-			&c->image_capture_scene->tree, c->surface.xdg);
+-	}
+-
+ 	/* Handle unmanaged clients first so we can return prior create borders
+ 	 */
+ 	if (client_init_unmanaged(c))
+@@ -4703,6 +4710,30 @@ void client_send_frame_done(Client *c, const struct timespec *now) {
+ 	wlr_surface_for_each_surface(s, mango_surface_frame_done, (void *)now);
+ }
+ 
++/*
++ * Drop the foreign-toplevel image capture source of a client and rebuild the
++ * private capture scene it is attached to. The scene-node capture source owns
++ * an internal wlr_output whose allocator/renderer were fixed at creation, so
++ * it must not outlive server.renderer/server.allocator (renderer recreation,
++ * possibly on another GPU). Destroying the scene destroys the source, which
++ * stops any active capture sessions; the next capture request creates a new
++ * source with the current renderer
++ * (handle_new_foreign_toplevel_capture_request).
++ */
++void client_reset_image_capture(Client *c) {
++	if (!c || !c->image_capture_scene)
++		return;
++
++	wlr_scene_node_destroy(&c->image_capture_scene->tree.node);
++	c->image_capture_scene = NULL;
++	c->image_capture_scene_surface = NULL;
++	c->image_capture_tree = NULL;
++	c->image_capture_source = NULL;
++
++	if (client_surface(c))
++		client_create_image_capture_scene(c);
++}
++
+ bool client_force_render(Client *c) {
+ 	if (!c || !c->mon || c->iskilling || !client_surface(c)->mapped ||
+ 		c->scene->node.enabled)
+diff --git a/src/manage/monitor.c b/src/manage/monitor.c
+index a4ea0c64..a69faad5 100644
+--- a/src/manage/monitor.c
++++ b/src/manage/monitor.c
+@@ -5,6 +5,7 @@
+ #include "mango/common/log.h"
+ #include "mango/common/server.h"
+ #include "mango/common/util.h"
++#include "mango/config/parse.h"
+ #include "mango/dispatch/bind.h"
+ #include "mango/draw/title-message-bar.h"
+ #include "mango/ext-protocol/ext-workspace.h"
+@@ -13,6 +14,7 @@
+ #include "mango/ext-protocol/tearing.h"
+ #include "mango/ext-protocol/text-input.h"
+ #include "mango/ext-protocol/xdg-output.h"
++#include "mango/input/pointer.h"
+ #include "mango/ipc/ipc.h"
+ #include "mango/layout/arrange.h"
+ #include "mango/layout/dwindle.h"
+@@ -23,25 +25,39 @@
+ #include "mango/manage/misc.h"
+ #include "mango/manage/xwayland_primary.h"
+ #include <fcntl.h>
++#include <limits.h>
+ #include <scenefx/render/fx_renderer/fx_renderer.h>
+ #include <scenefx/types/wlr_scene.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/stat.h>
++#include <sys/sysmacros.h>
+ #include <unistd.h>
+ #include <wlr/backend.h>
++#include <wlr/backend/drm.h>
+ #include <wlr/backend/headless.h>
++#include <wlr/backend/multi.h>
+ #include <wlr/backend/session.h>
+ #include <wlr/backend/wayland.h>
+ #include <wlr/render/allocator.h>
+ #include <wlr/render/wlr_renderer.h>
+ #include <wlr/types/wlr_compositor.h>
+ #include <wlr/types/wlr_cursor.h>
++#include <wlr/types/wlr_damage_ring.h>
+ #include <wlr/types/wlr_drm_lease_v1.h>
+ #include <wlr/types/wlr_layer_shell_v1.h>
++#include <wlr/types/wlr_linux_dmabuf_v1.h>
++#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
+ #include <wlr/types/wlr_output_layout.h>
+ #include <wlr/types/wlr_output_management_v1.h>
+ #include <wlr/types/wlr_output_power_management_v1.h>
++#include <wlr/types/wlr_seat.h>
+ #include <wlr/types/wlr_session_lock_v1.h>
+ #include <wlr/types/wlr_single_pixel_buffer_v1.h>
+ #include <wlr/types/wlr_switch.h>
++#include <wlr/types/wlr_xdg_shell.h>
++#include <xf86drm.h>
+ 
+ bool is_special_active(const Monitor *m) {
+ 	return m && !m->isoverview && (m->tagset[m->seltags] & TAG0_MASK);
+@@ -670,6 +686,7 @@ void handle_new_output(struct wl_listener *listener, void *data) {
+ 	m = wlr_output->data = ecalloc(1, sizeof(*m));
+ 	wlr_output_state_init(&m->pending);
+ 	m->frame_serial = 1;
++	m->created_ms = get_now_in_ms();
+ 
+ 	m->iscleanuping = false;
+ 	m->skip_frame_timeout =
+@@ -813,7 +830,13 @@ void handle_new_output(struct wl_listener *listener, void *data) {
+ 
+ 	wlr_scene_output_build_state(m->scene_output, &state, &opts);
+ 
+-	wlr_output_commit_state(wlr_output, &state);
++	if (!wlr_output_commit_state(wlr_output, &state) && state.enabled) {
++		m->enable_failed = true;
++		mango_error(true, WLR_ERROR,
++					"output %s: initial enable failed, will retry after the "
++					"next renderer recreation",
++					wlr_output->name);
++	}
+ 
+ 	wlr_output_state_finish(&state);
+ 	wlr_output_state_finish(&pending);
+@@ -977,6 +1000,22 @@ void monitor_close(Monitor *m) {
+ 	 * move closed monitor's clients to the focused one */
+ 	Client *c = NULL;
+ 	int32_t nmons = wl_list_length(&server.monitors);
++	/*
++	 * When a monitor goes away and its clients move to a monitor that only
++	 * just appeared (e.g. the same panel reappearing on another GPU through a
++	 * display mux), keep showing the same tags there instead of the new
++	 * monitor's default tag 1. "Just appeared" rather than "has no clients":
++	 * clients remembered for that output (oldmonname) are already moved back
++	 * onto it when it reappears. Focus may also have moved to it already.
++	 * Only once per time @m was enabled: disabled monitors are closed again
++	 * on every layout change, and a monitor that never got enabled has no
++	 * tags worth keeping. The special workspace (TAG0) is not carried over.
++	 */
++	uint32_t keep_tags =
++		(m->isoverview ? m->ovbk_current_tagset : m->tagset[m->seltags]) &
++		TAGMASK;
++	bool hand_off_tags = m->has_been_enabled && !m->tags_handed_off;
++	m->tags_handed_off = m->tags_handed_off || m->has_been_enabled;
+ 
+ 	if (server.gesture_drive_mon == m) {
+ 		server.gesture_drive_active = false;
+@@ -1024,6 +1063,12 @@ void monitor_close(Monitor *m) {
+ 		}
+ 	}
+ 	if (server.selected_monitor) {
++		Monitor *target = server.selected_monitor;
++		if (target != m && hand_off_tags && keep_tags &&
++			get_now_in_ms() - target->created_ms < 15000 &&
++			(target->tagset[target->seltags] & TAGMASK) != keep_tags) {
++			bind_to_view(&(Arg){.ui = keep_tags});
++		}
+ 		client_focus(client_focus_top(server.selected_monitor), 1);
+ 		printstatus(IPC_WATCH_ARRANGGE);
+ 	}
+@@ -1114,8 +1159,12 @@ void handle_output_layout_change(struct wl_listener *listener, void *data) {
+ 	}
+ 	/* Insert outputs that need to */
+ 	wl_list_for_each(m, &server.monitors, link) {
+-		if (m->wlr_output->enabled &&
+-			!wlr_output_layout_get(server.output_layout, m->wlr_output))
++		if (!m->wlr_output->enabled)
++			continue;
++		/* Enabled (again): may hand its tags off when it goes away */
++		m->has_been_enabled = true;
++		m->tags_handed_off = false;
++		if (!wlr_output_layout_get(server.output_layout, m->wlr_output))
+ 			wlr_output_layout_add_auto(server.output_layout, m->wlr_output);
+ 	}
+ 
+@@ -1483,44 +1532,410 @@ void check_vrr_enable(Client *c) {
+  * Output / Monitor: output creation/destruction, mode/adaptive sync/ICC,
+  * output manager protocol, rendering, and frame-skip control.
+  */
++/*
++ * Renderer recreation. Triggered by renderer->events.lost, which wlroots
++ * emits on a GPU reset and (with the dynamic-primary wlroots patch) when the
++ * primary DRM device changed. fx_renderer_create(server.backend) picks the
++ * device returned by wlr_backend_get_drm_fd(), so the new renderer may live
++ * on a different GPU than the old one: everything that captured the old
++ * renderer/allocator/device has to be migrated here.
++ *
++ * Failures never abort the compositor: the old renderer and allocator stay
++ * installed (they may still work, e.g. after a primary switch the old GPU is
++ * still alive) and recreation is retried on a timer.
++ */
++#define RENDERER_RECREATE_MAX_ATTEMPTS 10
++#define RENDERER_RECREATE_RETRY_MS 500
++
++static void do_renderer_recreate(void *data);
++
++static dev_t renderer_drm_dev(struct wlr_renderer *renderer) {
++	struct stat st;
++	int32_t fd = renderer ? wlr_renderer_get_drm_fd(renderer) : -1;
++
++	if (fd < 0 || fstat(fd, &st) != 0)
++		return 0;
++	return st.st_rdev;
++}
++
++static int32_t renderer_recreate_timer_cb(void *data) {
++	server.recreate_renderer_retrying = false;
++	do_renderer_recreate(NULL);
++	return 0;
++}
++
++static void renderer_recreate_schedule_retry(void) {
++	if (server.recreate_renderer_attempts >= RENDERER_RECREATE_MAX_ATTEMPTS) {
++		mango_error(true, WLR_ERROR,
++					"renderer recreation failed %d times, giving up; keeping "
++					"the previous renderer (output may stay black until the "
++					"next GPU reset / setrendergpu)",
++					server.recreate_renderer_attempts);
++		server.recreate_renderer_attempts = 0;
++		return;
++	}
++
++	if (!server.recreate_renderer_timer)
++		server.recreate_renderer_timer = wl_event_loop_add_timer(
++			server.event_loop, renderer_recreate_timer_cb, NULL);
++	if (!server.recreate_renderer_timer) {
++		mango_error(true, WLR_ERROR,
++					"cannot schedule renderer recreation retry");
++		server.recreate_renderer_attempts = 0;
++		return;
++	}
++
++	server.recreate_renderer_retrying = true;
++	wl_event_source_timer_update(server.recreate_renderer_timer,
++								 RENDERER_RECREATE_RETRY_MS);
++	mango_error(true, WLR_ERROR,
++				"renderer recreation attempt %d/%d failed, retrying in %dms",
++				server.recreate_renderer_attempts,
++				RENDERER_RECREATE_MAX_ATTEMPTS, RENDERER_RECREATE_RETRY_MS);
++}
++
++/* Point linux-dmabuf default feedback at the new renderer's device. */
++static void renderer_update_dmabuf(dev_t old_dev, dev_t new_dev) {
++	if (!wlr_renderer_get_texture_formats(server.renderer,
++										  WLR_BUFFER_CAP_DMABUF)) {
++		if (server.linux_dmabuf)
++			mango_error(true, WLR_ERROR,
++						"new renderer has no dmabuf support, linux-dmabuf "
++						"keeps advertising the previous device");
++		return;
++	}
++
++	if (!server.linux_dmabuf) {
++		/* The previous renderer had no dmabuf support; the global can be
++		 * created at any time. */
++		server.linux_dmabuf = wlr_linux_dmabuf_v1_create_with_renderer(
++			server.display, 4, server.renderer);
++		if (server.linux_dmabuf)
++			wlr_scene_set_linux_dmabuf_v1(server.scene, server.linux_dmabuf);
++		else
++			mango_error(true, WLR_ERROR, "failed to create linux-dmabuf");
++		return;
++	}
++
++#ifdef WLR_DRM_HAS_DYNAMIC_PRIMARY
++	struct wlr_linux_dmabuf_feedback_v1 feedback = {0};
++	const struct wlr_linux_dmabuf_feedback_v1_init_options options = {
++		.main_renderer = server.renderer,
++		.scanout_primary_output = NULL,
++	};
++
++	if (!wlr_linux_dmabuf_feedback_v1_init_with_options(&feedback, &options)) {
++		mango_error(true, WLR_ERROR,
++					"failed to build dmabuf feedback for the new renderer");
++		return;
++	}
++	if (!wlr_linux_dmabuf_v1_set_default_feedback(server.linux_dmabuf,
++												  &feedback))
++		mango_error(true, WLR_ERROR,
++					"failed to update default dmabuf feedback");
++	wlr_linux_dmabuf_feedback_v1_finish(&feedback);
++#else
++	if (old_dev != new_dev)
++		mango_error(true, WLR_ERROR,
++					"renderer moved to another DRM device but this wlroots "
++					"cannot update the default dmabuf feedback; clients may "
++					"keep allocating on the old GPU");
++#endif
++}
++
++/*
++ * Textures uploaded by the old renderer are dropped when it is destroyed
++ * (wlr_client_buffer / wlr_scene_buffer renderer_destroy listeners), and
++ * wlr_compositor only uploads on the next commit, so idle surfaces would stay
++ * invisible. Ask clients to repaint:
++ *  - damage + schedule a frame on every output, so the frame handler runs and
++ *    sends frame_done to every visible surface (unblocks clients waiting on a
++ *    frame callback);
++ *  - send a configure (same state) to xdg toplevels and layer surfaces with
++ *    no configure in flight: the client must ack and commit, and toolkits
++ *    redraw on configure. This needs no geometry change and does not touch
++ *    the layout code.
++ * Xwayland windows are only covered by Xwayland's own repaint on damage.
++ * Cursor textures are dropped too, so re-apply the cursor image.
++ */
++static void renderer_nudge_repaint(void) {
++	Monitor *m = NULL;
++	Client *c = NULL;
++	LayerSurface *l = NULL;
++
++	wl_list_for_each(c, &server.clients, link) {
++		if (c->iskilling || client_is_x11(c) || !client_surface(c) ||
++			!client_surface(c)->mapped || !c->surface.xdg ||
++			!c->surface.xdg->initialized)
++			continue;
++		wlr_xdg_surface_schedule_configure(c->surface.xdg);
++	}
++
++	wl_list_for_each(m, &server.monitors, link) {
++		for (int32_t i = 0; i < (int32_t)LENGTH(m->layers); i++) {
++			wl_list_for_each(l, &m->layers[i], link) {
++				struct wlr_layer_surface_v1 *ls = l->layer_surface;
++				if (!ls || !ls->initialized || !ls->surface->mapped ||
++					!wl_list_empty(&ls->configure_list))
++					continue;
++				wlr_layer_surface_v1_configure(ls, ls->current.actual_width,
++											   ls->current.actual_height);
++			}
++		}
++
++		if (m->scene_output)
++			wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
++		wlr_output_schedule_frame(m->wlr_output);
++	}
++
++	reapply_cursor_style();
++	/* Re-enter the surface under the pointer so it re-sets its cursor
++	 * surface; skip during grabs/drags to not disturb them. */
++	if (server.cursor_mode == CurNormal && !server.seat->drag) {
++		wlr_seat_pointer_notify_clear_focus(server.seat);
++		pointer_process_motion(0, NULL, 0, 0, 0, 0);
++	}
++}
++
+ static void do_renderer_recreate(void *data) {
+ 	struct wlr_renderer *old_drw = server.renderer;
+ 	struct wlr_allocator *old_alloc = server.allocator;
+-	struct Monitor *m = NULL;
++	struct wlr_renderer *drw = NULL;
++	struct wlr_allocator *alloc = NULL;
++	Monitor *m = NULL, *failed = NULL;
++	Client *c = NULL;
+ 
+ 	server.recreate_renderer_source = NULL;
++	server.recreate_renderer_attempts++;
+ 
+-	if (!(server.renderer = fx_renderer_create(server.backend)))
+-		die("couldn't recreate renderer");
++	if (!(drw = fx_renderer_create(server.backend))) {
++		mango_error(true, WLR_ERROR, "couldn't recreate renderer");
++		goto retry;
++	}
+ 
+-	if (!(server.allocator =
+-			  wlr_allocator_autocreate(server.backend, server.renderer)))
+-		die("couldn't recreate allocator");
++	if (!(alloc = wlr_allocator_autocreate(server.backend, drw))) {
++		mango_error(true, WLR_ERROR, "couldn't recreate allocator");
++		wlr_renderer_destroy(drw);
++		goto retry;
++	}
++
++	/* wlr_output_init_render() leaves the output untouched on failure. */
++	wl_list_for_each(m, &server.monitors, link) {
++		if (!wlr_output_init_render(m->wlr_output, alloc, drw)) {
++			failed = m;
++			break;
++		}
++	}
++	if (failed) {
++		mango_error(true, WLR_ERROR,
++					"couldn't init rendering on output %s with the new "
++					"renderer, rolling back",
++					failed->wlr_output->name);
++		wl_list_for_each(m, &server.monitors, link) {
++			if (m == failed)
++				break;
++			if (!wlr_output_init_render(m->wlr_output, old_alloc, old_drw))
++				mango_error(true, WLR_ERROR, "rollback of output %s failed",
++							m->wlr_output->name);
++		}
++		wlr_allocator_destroy(alloc);
++		wlr_renderer_destroy(drw);
++		goto retry;
++	}
++
++	/* Commit point: from here on the new renderer is in use. */
++	server.renderer = drw;
++	server.allocator = alloc;
++	server.recreate_renderer_attempts = 0;
+ 
+ 	wl_list_remove(&server.gpu_reset_listener.link);
+ 	wl_signal_add(&server.renderer->events.lost, &server.gpu_reset_listener);
+ 
+ 	wlr_compositor_set_renderer(server.compositor, server.renderer);
+ 
+-	wl_list_for_each(m, &server.monitors, link) {
+-		wlr_output_init_render(m->wlr_output, server.allocator,
+-							   server.renderer);
++	/* Scene-node capture sources hold the old allocator/renderer. */
++	wl_list_for_each(c, &server.clients, link) {
++		client_reset_image_capture(c);
+ 	}
+ 
++	dev_t old_dev = renderer_drm_dev(old_drw);
++	dev_t new_dev = renderer_drm_dev(server.renderer);
++	renderer_update_dmabuf(old_dev, new_dev);
++
++	/*
++	 * The syncobj manager keeps a dup of the old device fd and cannot be
++	 * destroyed/recreated (no wlroots API). Timelines are imported through
++	 * that fd and consumed as sync_files, which work across devices, so it
++	 * keeps working while the old GPU stays alive. Warn when the new
++	 * renderer can't do timelines at all.
++	 */
++	if (server.syncobj_manager && !server.renderer->features.timeline)
++		mango_error(true, WLR_ERROR,
++					"new renderer lacks timeline support but "
++					"linux-drm-syncobj is advertised; explicit sync clients "
++					"may misrender (set syncobj_enable=0)");
++
++	/*
++	 * wl_drm (created in setup) keeps advertising the old render node: no
++	 * wlroots API to destroy/update it. Legacy only, see main.c.
++	 *
++	 * wl_shm, color-manager and color-representation globals only copied
++	 * format/feature lists from the old renderer at creation.
++	 */
++
+ 	wlr_allocator_destroy(old_alloc);
+ 	wlr_renderer_destroy(old_drw);
++
++	mango_error(true, WLR_INFO,
++				"renderer recreated on DRM device %u:%u (was %u:%u)",
++				major(new_dev), minor(new_dev), major(old_dev), minor(old_dev));
++
++	/*
++	 * Outputs that appeared while the old renderer could not drive them (e.g.
++	 * the panel coming back on the iGPU while still rendering on the dGPU)
++	 * failed their first enable. Enable them now from their monitor rules,
++	 * the same thing a VT switch would eventually trigger.
++	 */
++	wl_list_for_each(m, &server.monitors, link) {
++		if (!m->enable_failed || m->wlr_output->enabled || m->prefer_disable)
++			continue;
++		m->enable_failed = false;
++		reapply_monitor_rule(m);
++		if (m->wlr_output->enabled) {
++			mango_error(true, WLR_INFO,
++						"output %s enabled after renderer change",
++						m->wlr_output->name);
++		} else {
++			m->enable_failed = true;
++			mango_error(true, WLR_ERROR,
++						"output %s still cannot be enabled on the new renderer",
++						m->wlr_output->name);
++		}
++	}
++
++	renderer_nudge_repaint();
++	return;
++
++retry:
++	renderer_recreate_schedule_retry();
+ }
+ 
+ void handle_renderer_lost(struct wl_listener *listener, void *data) {
+-	if (server.recreate_renderer_source)
++	if (server.recreate_renderer_source || server.recreate_renderer_retrying)
+ 		return;
+ 
+-	mango_error(true, WLR_DEBUG, "gpu reset");
++	mango_error(true, WLR_INFO,
++				"renderer lost (GPU reset or primary GPU "
++				"change), recreating");
+ 
++	server.recreate_renderer_attempts = 0;
+ 	server.recreate_renderer_source =
+ 		wl_event_loop_add_idle(server.event_loop, do_renderer_recreate, NULL);
+ }
+ 
++#ifdef WLR_DRM_HAS_DYNAMIC_PRIMARY
++struct render_gpu_match {
++	char path[PATH_MAX];
++	struct wlr_backend *match;
++	int32_t candidates;
++};
++
++static bool drm_device_has_node(drmDevicePtr dev, const char *path) {
++	for (int32_t i = 0; i < DRM_NODE_MAX; i++) {
++		if (!(dev->available_nodes & (1 << i)) || !dev->nodes[i])
++			continue;
++		if (strcmp(dev->nodes[i], path) == 0)
++			return true;
++		const char *base = strrchr(dev->nodes[i], '/');
++		if (base && strcmp(base + 1, path) == 0)
++			return true;
++	}
++	return false;
++}
++
++static void find_render_gpu_backend(struct wlr_backend *backend, void *data) {
++	struct render_gpu_match *ctx = data;
++	drmDevicePtr dev = NULL;
++
++	if (!wlr_backend_is_drm(backend))
++		return;
++	ctx->candidates++;
++
++	int32_t fd = wlr_backend_get_drm_fd(backend);
++	if (fd < 0 || drmGetDevice2(fd, 0, &dev) != 0 || !dev)
++		return;
++	if (!ctx->match && drm_device_has_node(dev, ctx->path))
++		ctx->match = backend;
++	drmFreeDevice(&dev);
++}
++#endif
++
++/*
++ * setrendergpu,<card0|renderD128|/dev/dri/...|recreate>
++ * Make the given DRM device the primary (rendering) GPU. wlroots then emits
++ * renderer->events.lost and do_renderer_recreate() migrates everything.
++ * "recreate" just recreates the renderer on the current primary GPU.
++ */
++int32_t set_render_gpu(const Arg *arg) {
++	const char *want = arg ? arg->v : NULL;
++
++	if (!want || want[0] == '\0') {
++		mango_error(true, WLR_ERROR,
++					"setrendergpu: missing DRM device argument");
++		return 0;
++	}
++
++	if (strcmp(want, "recreate") == 0) {
++		handle_renderer_lost(NULL, NULL);
++		return 0;
++	}
++
++#ifdef WLR_DRM_HAS_DYNAMIC_PRIMARY
++	struct render_gpu_match ctx = {0};
++	char resolved[PATH_MAX];
++
++	if (strchr(want, '/'))
++		snprintf(ctx.path, sizeof(ctx.path), "%s",
++				 realpath(want, resolved) ? resolved : want);
++	else
++		snprintf(ctx.path, sizeof(ctx.path), "%s", want);
++
++	if (!wlr_backend_is_multi(server.backend)) {
++		if (wlr_backend_is_drm(server.backend))
++			find_render_gpu_backend(server.backend, &ctx);
++	} else {
++		wlr_multi_for_each_backend(server.backend, find_render_gpu_backend,
++								   &ctx);
++	}
++
++	if (!ctx.match) {
++		mango_error(true, WLR_ERROR,
++					"setrendergpu: no DRM backend matches '%s' (%d DRM "
++					"backends)",
++					want, ctx.candidates);
++		return 0;
++	}
++
++	if (wlr_drm_backend_get_primary(ctx.match) == ctx.match) {
++		mango_error(true, WLR_INFO, "setrendergpu: '%s' is already primary",
++					want);
++		return 0;
++	}
++
++	if (!wlr_drm_backend_set_primary(ctx.match))
++		mango_error(true, WLR_ERROR,
++					"setrendergpu: wlroots refused to make '%s' primary", want);
++	else
++		mango_error(true, WLR_INFO, "setrendergpu: '%s' is now primary", want);
++#else
++	mango_error(true, WLR_ERROR,
++				"setrendergpu: '%s' ignored, wlroots lacks dynamic primary GPU "
++				"support (WLR_DRM_HAS_DYNAMIC_PRIMARY)",
++				want);
++#endif
++	return 0;
++}
++
+ void setgaps(int32_t oh, int32_t ov, int32_t ih, int32_t iv) {
+ 	if (!server.selected_monitor)
+ 		return;

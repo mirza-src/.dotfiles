@@ -1,0 +1,2499 @@
+diff --git a/README.md b/README.md
+index 65cd5e3..6f3de84 100644
+--- a/README.md
++++ b/README.md
+@@ -37,6 +37,9 @@ Modes are available depending on your system type:
+ - Hybrid(kept as a default mode, everything goes back to unblocked)
+ - Manual
+ 
++**Laptops with a live display mux** (patched nvidia-modeset exposing the `mux` parameter, e.g. ASUS ROG Zephyrus G14 2025)
++- Ultimate (Hybrid, plus the internal panel driven directly by the dGPU, switched live)
++
+ ## How it works
+ 
+ Cardwire uses eBPF with LSM hooks to intercept file operations on GPU device nodes, such as `/dev/dri/renderDX`, `/dev/dri/cardX`, sysfs `config`, `nvidiaX` and other GPU-related files.
+diff --git a/assets/icons/org.opengamingcollective.cardwire.tray-ultimate.svg b/assets/icons/org.opengamingcollective.cardwire.tray-ultimate.svg
+new file mode 100644
+index 0000000..4d05eea
+--- /dev/null
++++ b/assets/icons/org.opengamingcollective.cardwire.tray-ultimate.svg
+@@ -0,0 +1,5 @@
++<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
++  <rect x="32" y="32" width="192" height="192" rx="16" stroke="#4A5568" stroke-width="16" fill="#2D3748"/>
++  <rect x="72" y="72" width="112" height="112" rx="8" fill="#4A5568"/><circle cx="128" cy="128" r="48" fill="#E53E3E"/>
++  <path d="M64 32v-16m32 16v-16m32 16v-16m32 16v-16m32 16v-16M64 224v16m32-16v16m32-16v16m32-16v16m32-16v16M32 64H16m16 32H16m16 32H16m16 32H16m16 32H16M224 64h16m-16 32h16m-16 32h16m-16 32h16m-16 32h16" stroke="#4A5568" stroke-width="8" stroke-linecap="round"/>
++</svg>
+diff --git a/crates/cardwire-cli/src/args.rs b/crates/cardwire-cli/src/args.rs
+index be2b5e7..8597736 100644
+--- a/crates/cardwire-cli/src/args.rs
++++ b/crates/cardwire-cli/src/args.rs
+@@ -11,6 +11,31 @@ pub enum CliMode {
+     Hybrid,
+     Manual,
+     Smart,
++    Ultimate,
++}
++impl CliMode {
++    /// D-Bus encoding of the mode (same order as the daemon's `Modes`)
++    pub fn to_u32(self) -> u32 {
++        match self {
++            CliMode::Integrated => 0,
++            CliMode::Hybrid => 1,
++            CliMode::Manual => 2,
++            CliMode::Smart => 3,
++            CliMode::Ultimate => 4,
++        }
++    }
++
++    /// Decode a D-Bus mode value
++    pub fn from_u32(value: u32) -> Option<Self> {
++        match value {
++            0 => Some(CliMode::Integrated),
++            1 => Some(CliMode::Hybrid),
++            2 => Some(CliMode::Manual),
++            3 => Some(CliMode::Smart),
++            4 => Some(CliMode::Ultimate),
++            _ => None,
++        }
++    }
+ }
+ impl fmt::Display for CliMode {
+     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+@@ -19,6 +44,7 @@ impl fmt::Display for CliMode {
+             CliMode::Hybrid => write!(f, "Hybrid"),
+             CliMode::Manual => write!(f, "Manual"),
+             CliMode::Smart => write!(f, "Smart"),
++            CliMode::Ultimate => write!(f, "Ultimate"),
+         }
+     }
+ }
+@@ -78,6 +104,15 @@ pub enum Commands {
+         action: ManagerAction,
+     },
+ 
++    #[command(
++        about = "Live display mux (Ultimate mode) operations",
++        arg_required_else_help = true
++    )]
++    Mux {
++        #[command(subcommand)]
++        action: MuxAction,
++    },
++
+     #[command(about = "Debug operations", arg_required_else_help = true)]
+     Debug {
+         #[command(subcommand)]
+@@ -144,6 +179,16 @@ pub enum ManagerAction {
+     Status,
+ }
+ 
++#[derive(Subcommand, Debug)]
++pub enum MuxAction {
++    #[command(about = "Print the live display mux state")]
++    Status,
++    #[command(about = "Apply a pending Ultimate mode (run after login)")]
++    Apply,
++    #[command(about = "Re-read the mux state and reconcile it with the current mode")]
++    Reconcile,
++}
++
+ #[derive(Subcommand, Debug)]
+ pub enum DebugAction {
+     #[command(about = "Run GPU diagnostics")]
+@@ -178,6 +223,31 @@ mod tests {
+         assert_eq!(CliMode::Hybrid.to_string(), "Hybrid");
+         assert_eq!(CliMode::Manual.to_string(), "Manual");
+         assert_eq!(CliMode::Smart.to_string(), "Smart");
++        assert_eq!(CliMode::Ultimate.to_string(), "Ultimate");
++    }
++
++    #[test]
++    fn test_cli_mode_u32_roundtrip() {
++        for value in 0..=4u32 {
++            let mode = CliMode::from_u32(value).unwrap();
++            assert_eq!(mode.to_u32(), value);
++        }
++        assert_eq!(CliMode::from_u32(5), None);
++    }
++
++    #[test]
++    fn test_args_parse_mux_commands() {
++        for (arg, expected) in [
++            ("status", "Status"),
++            ("apply", "Apply"),
++            ("reconcile", "Reconcile"),
++        ] {
++            let args = Args::try_parse_from(["cardwire", "mux", arg]).unwrap();
++            match args.command {
++                Commands::Mux { action } => assert_eq!(format!("{action:?}"), expected),
++                _ => panic!("expected Mux command"),
++            }
++        }
+     }
+ 
+     #[test]
+@@ -240,7 +310,7 @@ mod tests {
+ 
+     #[test]
+     fn test_args_parse_set_all_modes() {
+-        for mode_str in ["integrated", "hybrid", "manual", "smart"] {
++        for mode_str in ["integrated", "hybrid", "manual", "smart", "ultimate"] {
+             let result = Args::try_parse_from(["cardwire", "set", mode_str]);
+             assert!(result.is_ok(), "failed to parse mode: {mode_str}");
+         }
+diff --git a/crates/cardwire-cli/src/completion.rs b/crates/cardwire-cli/src/completion.rs
+index 055a097..7a279a6 100644
+--- a/crates/cardwire-cli/src/completion.rs
++++ b/crates/cardwire-cli/src/completion.rs
+@@ -8,10 +8,11 @@ complete -c cardwire -f -n '__fish_use_subcommand' -a 'list' -d 'Print the gpu l
+ complete -c cardwire -f -n '__fish_use_subcommand' -a 'gpu' -d 'Manage a specific GPU by its id'
+ complete -c cardwire -f -n '__fish_use_subcommand' -a 'config' -d 'Manage daemon configuration'
+ complete -c cardwire -f -n '__fish_use_subcommand' -a 'manager' -d 'Manager operations'
++complete -c cardwire -f -n '__fish_use_subcommand' -a 'mux' -d 'Live display mux (Ultimate mode) operations'
+ complete -c cardwire -f -n '__fish_use_subcommand' -a 'debug' -d 'Debug operations'
+ 
+ # set <mode>
+-complete -c cardwire -f -n '__fish_seen_subcommand_from set; and test (count (commandline -opc)) -eq 2' -a "integrated\t'Integrated GPU only' hybrid\t'Hybrid mode' manual\t'Manual mode' smart\t'Smart mode'"
++complete -c cardwire -f -n '__fish_seen_subcommand_from set; and test (count (commandline -opc)) -eq 2' -a "integrated\t'Integrated GPU only' hybrid\t'Hybrid mode' manual\t'Manual mode' smart\t'Smart mode' ultimate\t'Panel on the dGPU (live mux)'"
+ 
+ # list
+ complete -c cardwire -f -n '__fish_seen_subcommand_from list' -l full -d 'Print the whole pci list'
+@@ -36,11 +37,16 @@ complete -c cardwire -f -n '__fish_seen_subcommand_from auto-apply-gpu-state; an
+ complete -c cardwire -f -n '__fish_seen_subcommand_from experimental-nvidia-block; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
+ complete -c cardwire -f -n '__fish_seen_subcommand_from battery-auto-switch; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
+ complete -c cardwire -f -n '__fish_seen_subcommand_from external-display-auto-switch; and test (count (commandline -opc)) -eq 3' -a "true\t'Enable' false\t'Disable'"
+-complete -c cardwire -f -n '__fish_seen_subcommand_from battery-auto-switch-mode; and test (count (commandline -opc)) -eq 3' -a "integrated\t'Integrated GPU only' hybrid\t'Hybrid mode' manual\t'Manual mode' smart\t'Smart mode'"
++complete -c cardwire -f -n '__fish_seen_subcommand_from battery-auto-switch-mode; and test (count (commandline -opc)) -eq 3' -a "integrated\t'Integrated GPU only' hybrid\t'Hybrid mode' manual\t'Manual mode' smart\t'Smart mode' ultimate\t'Panel on the dGPU (live mux)'"
+ 
+ # manager <action>
+ complete -c cardwire -f -n '__fish_seen_subcommand_from manager; and not __fish_seen_subcommand_from status' -a 'status' -d 'Check if daemon is alive'
+ 
++# mux <action>
++complete -c cardwire -f -n '__fish_seen_subcommand_from mux; and not __fish_seen_subcommand_from status apply reconcile' -a 'status' -d 'Print the live display mux state'
++complete -c cardwire -f -n '__fish_seen_subcommand_from mux; and not __fish_seen_subcommand_from status apply reconcile' -a 'apply' -d 'Apply a pending Ultimate mode'
++complete -c cardwire -f -n '__fish_seen_subcommand_from mux; and not __fish_seen_subcommand_from status apply reconcile' -a 'reconcile' -d 'Reconcile the mux state'
++
+ # debug <action>
+ complete -c cardwire -f -n '__fish_seen_subcommand_from debug; and not __fish_seen_subcommand_from diagnostic-gpu refresh-gpu' -a 'diagnostic-gpu' -d 'Run GPU diagnostics'
+ complete -c cardwire -f -n '__fish_seen_subcommand_from debug; and not __fish_seen_subcommand_from diagnostic-gpu refresh-gpu' -a 'refresh-gpu' -d 'Refresh GPU list in daemon'
+diff --git a/crates/cardwire-cli/src/dbus.rs b/crates/cardwire-cli/src/dbus.rs
+index 2b0a46a..1a447fa 100644
+--- a/crates/cardwire-cli/src/dbus.rs
++++ b/crates/cardwire-cli/src/dbus.rs
+@@ -21,6 +21,14 @@ pub struct DbusGpuDevice {
+     pub nvidia_minor: String,
+ }
+ 
++/// Snapshot of the org.opengamingcollective.cardwire.Mux properties
++pub struct MuxStatus {
++    pub capable: bool,
++    pub panel_gpu: String,
++    pub state: String,
++    pub last_error: String,
++}
++
+ pub struct DaemonClient<'a> {
+     proxy: Proxy<'a>,
+ }
+@@ -304,6 +312,34 @@ impl<'a> DaemonClient<'a> {
+         proxy.call("DiagnosticGpu", &()).await
+     }
+ 
++    async fn mux_proxy(&self) -> zbus::Result<Proxy<'_>> {
++        zbus::Proxy::new(
++            self.proxy.connection(),
++            "org.opengamingcollective.cardwire",
++            "/org/opengamingcollective/cardwire",
++            "org.opengamingcollective.cardwire.Mux",
++        )
++        .await
++    }
++
++    pub async fn mux_status(&self) -> zbus::Result<MuxStatus> {
++        let proxy = self.mux_proxy().await?;
++        Ok(MuxStatus {
++            capable: proxy.get_property("Capable").await?,
++            panel_gpu: proxy.get_property("PanelGpu").await?,
++            state: proxy.get_property("State").await?,
++            last_error: proxy.get_property("LastError").await?,
++        })
++    }
++
++    pub async fn mux_apply_pending(&self) -> zbus::Result<()> {
++        self.mux_proxy().await?.call("ApplyPending", &()).await
++    }
++
++    pub async fn mux_reconcile(&self) -> zbus::Result<()> {
++        self.mux_proxy().await?.call("Reconcile", &()).await
++    }
++
+     pub async fn refresh_gpu(&self) -> zbus::Result<()> {
+         let proxy = zbus::Proxy::new(
+             self.proxy.connection(),
+diff --git a/crates/cardwire-cli/src/main.rs b/crates/cardwire-cli/src/main.rs
+index 8018c31..6f58eaf 100644
+--- a/crates/cardwire-cli/src/main.rs
++++ b/crates/cardwire-cli/src/main.rs
+@@ -6,7 +6,7 @@ mod types;
+ 
+ use std::{collections::BTreeMap, process::Stdio};
+ 
+-use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction};
++use args::{Args, CliMode, Commands, ConfigAction, DebugAction, ManagerAction, MuxAction};
+ use clap::{CommandFactory, Parser};
+ use dbus::DaemonClient;
+ 
+@@ -37,9 +37,14 @@ async fn main() -> anyhow::Result<()> {
+         return Ok(());
+     }
+ 
+-    // Connect to D-Bus
++    // Connect to D-Bus. A switch to/from Ultimate can take longer than the default 25 s method
++    // timeout (panel handover, safety deadline, revert).
+     let connection: zbus::Connection = match zbus::connection::Builder::system() {
+-        Ok(builder) => match builder.build().await {
++        Ok(builder) => match builder
++            .method_timeout(std::time::Duration::from_secs(90))
++            .build()
++            .await
++        {
+             Ok(conn) => conn,
+             Err(e) => handle_error(e),
+         },
+@@ -60,12 +65,7 @@ async fn main() -> anyhow::Result<()> {
+ 
+     match args.command {
+         Commands::Set { mode } => {
+-            let mode_u32 = match mode {
+-                CliMode::Integrated => 0,
+-                CliMode::Hybrid => 1,
+-                CliMode::Manual => 2,
+-                CliMode::Smart => 3,
+-            };
++            let mode_u32 = mode.to_u32();
+ 
+             match client.set_mode(&mode_u32).await {
+                 Ok(_) => println!("Mode has been set to {}", mode),
+@@ -84,14 +84,8 @@ async fn main() -> anyhow::Result<()> {
+                 .join(", ");
+             match client.get_mode().await {
+                 Ok(response) => {
+-                    let response: CliMode = match response {
+-                        0 => CliMode::Integrated,
+-                        1 => CliMode::Hybrid,
+-                        2 => CliMode::Manual,
+-                        3 => CliMode::Smart,
+-                        // shouldn't happen
+-                        _ => CliMode::Manual,
+-                    };
++                    // shouldn't happen
++                    let response = CliMode::from_u32(response).unwrap_or(CliMode::Manual);
+                     println!("Current Mode: {}", response);
+                     println!("Available Mode: {}", available_modes_str);
+                 }
+@@ -190,12 +184,7 @@ async fn main() -> anyhow::Result<()> {
+             ConfigAction::BatteryAutoSwitchMode { set } => {
+                 if let Some(val) = set {
+                     {
+-                        let mode_u32 = match val {
+-                            CliMode::Integrated => 0,
+-                            CliMode::Hybrid => 1,
+-                            CliMode::Manual => 2,
+-                            CliMode::Smart => 3,
+-                        };
++                        let mode_u32 = val.to_u32();
+ 
+                         match client.set_battery_auto_switch_mode(&mode_u32).await {
+                             Ok(_) => println!("Auto switch mode has been set to {}", val),
+@@ -205,14 +194,8 @@ async fn main() -> anyhow::Result<()> {
+                 } else {
+                     match client.get_battery_auto_switch_mode().await {
+                         Ok(response) => {
+-                            let response: CliMode = match response {
+-                                0 => CliMode::Integrated,
+-                                1 => CliMode::Hybrid,
+-                                2 => CliMode::Manual,
+-                                3 => CliMode::Smart,
+-                                // shouldn't happen
+-                                _ => CliMode::Manual,
+-                            };
++                            // shouldn't happen
++                            let response = CliMode::from_u32(response).unwrap_or(CliMode::Manual);
+                             println!("BatteryAutoSwitch: {}", response)
+                         }
+                         Err(e) => handle_error(e),
+@@ -250,6 +233,33 @@ async fn main() -> anyhow::Result<()> {
+                 }
+             }
+         },
++        Commands::Mux { action } => match action {
++            MuxAction::Status => match client.mux_status().await {
++                Ok(status) => {
++                    println!("Capable: {}", status.capable);
++                    println!("Panel GPU: {}", status.panel_gpu);
++                    println!("State: {}", status.state);
++                    if !status.last_error.is_empty() {
++                        println!("Last error: {}", status.last_error);
++                    }
++                }
++                Err(e) => handle_error(e),
++            },
++            MuxAction::Apply => match client.mux_apply_pending().await {
++                Ok(()) => match client.mux_status().await {
++                    Ok(status) => println!(
++                        "Pending mode applied (panel on {}, state {})",
++                        status.panel_gpu, status.state
++                    ),
++                    Err(_) => println!("Pending mode applied"),
++                },
++                Err(e) => handle_error(e),
++            },
++            MuxAction::Reconcile => match client.mux_reconcile().await {
++                Ok(()) => println!("Mux state reconciled"),
++                Err(e) => handle_error(e),
++            },
++        },
+         Commands::Debug { action } => match action {
+             DebugAction::DiagnosticGpu => {
+                 if let Err(e) = client.diagnostic_gpu().await {
+diff --git a/crates/cardwire-daemon/Cargo.toml b/crates/cardwire-daemon/Cargo.toml
+index 22f0751..6150f03 100644
+--- a/crates/cardwire-daemon/Cargo.toml
++++ b/crates/cardwire-daemon/Cargo.toml
+@@ -57,6 +57,7 @@ assets = [
+     ["../../assets/icons/org.opengamingcollective.cardwire.tray-hybrid.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+     ["../../assets/icons/org.opengamingcollective.cardwire.tray-manual.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+     ["../../assets/icons/org.opengamingcollective.cardwire.tray-smart.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
++    ["../../assets/icons/org.opengamingcollective.cardwire.tray-ultimate.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+ ]
+ maintainer-scripts = "../../packages/debian/DEBIAN"
+ changelog = "../../packages/debian/changelog"
+diff --git a/crates/cardwire-daemon/src/core/env.rs b/crates/cardwire-daemon/src/core/env.rs
+index 4194a8e..c7fa35e 100644
+--- a/crates/cardwire-daemon/src/core/env.rs
++++ b/crates/cardwire-daemon/src/core/env.rs
+@@ -88,6 +88,9 @@ mod tests {
+         assert!(is_gpu_launchable(true, false, Modes::Integrated));
+         assert!(is_gpu_launchable(true, false, Modes::Hybrid));
+         assert!(is_gpu_launchable(true, false, Modes::Smart));
++        // Ultimate behaves like Hybrid
++        assert!(is_gpu_launchable(true, false, Modes::Ultimate));
++        assert!(!is_gpu_launchable(true, true, Modes::Ultimate));
+     }
+ 
+     #[test]
+@@ -103,6 +106,7 @@ mod tests {
+     fn test_is_gpu_launchable_unavailable_gpu() {
+         assert!(!is_gpu_launchable(false, false, Modes::Hybrid));
+         assert!(!is_gpu_launchable(false, false, Modes::Smart));
++        assert!(!is_gpu_launchable(false, false, Modes::Ultimate));
+     }
+ 
+     #[test]
+diff --git a/crates/cardwire-daemon/src/core/gpu/default_gpu.rs b/crates/cardwire-daemon/src/core/gpu/default_gpu.rs
+index a935f70..95b0b53 100644
+--- a/crates/cardwire-daemon/src/core/gpu/default_gpu.rs
++++ b/crates/cardwire-daemon/src/core/gpu/default_gpu.rs
+@@ -1,6 +1,6 @@
+ //! KDE KWin-derived heuristic for identifying the default/boot GPU.
+ 
+-use crate::core::gpu::models::GpuDevice;
++use crate::core::gpu::models::{GpuDevice, GpuVendor};
+ use log::{info, warn};
+ use std::{
+     collections::{BTreeMap, HashMap}, fs, io, path::Path
+@@ -118,6 +118,26 @@ pub fn check_default_drm_class(gpu_list: &mut BTreeMap<usize, GpuDevice>) -> io:
+             })
+     });
+ 
++    // Live display mux guard: while the internal panel is muxed to the dGPU (Ultimate mode), the
++    // dGPU owns the connected eDP and would win the heuristic above. The iGPU is still the
++    // default/boot GPU, keep it (the non-NVIDIA GPU owning an eDP connector).
++    let default_id = if crate::core::mux::panel_on_dgpu_blocking() {
++        let igpu = gpu_list
++            .iter()
++            .filter(|(_, gpu)| gpu.is_available() && gpu.gpu_vendor() != GpuVendor::Nvidia)
++            .find(|(_, gpu)| {
++                let prefix = format!("card{}-eDP-", gpu.card());
++                drm_entries.iter().any(|name| name.starts_with(&prefix))
++            })
++            .map(|(id, _)| *id);
++        if igpu.is_some() {
++            info!("panel is muxed to the dGPU, keeping the iGPU as the default GPU");
++        }
++        igpu.or(default_id)
++    } else {
++        default_id
++    };
++
+     for (id, gpu) in &mut *gpu_list {
+         if !gpu.is_available() {
+             gpu.set_default(Some(false));
+diff --git a/crates/cardwire-daemon/src/core/mod.rs b/crates/cardwire-daemon/src/core/mod.rs
+index 54023ca..1cdf35a 100644
+--- a/crates/cardwire-daemon/src/core/mod.rs
++++ b/crates/cardwire-daemon/src/core/mod.rs
+@@ -2,6 +2,7 @@ pub mod env;
+ pub mod errors;
+ pub mod gpu;
+ pub mod inode;
++pub mod mux;
+ pub mod pci;
+ pub mod procfs;
+ pub mod whitelist;
+diff --git a/crates/cardwire-daemon/src/core/mux.rs b/crates/cardwire-daemon/src/core/mux.rs
+new file mode 100644
+index 0000000..b22922c
+--- /dev/null
++++ b/crates/cardwire-daemon/src/core/mux.rs
+@@ -0,0 +1,849 @@
++//! Live display mux driver used by the Ultimate mode.
++//!
++//! Some laptops (e.g. the ASUS ROG Zephyrus G14 2025) route the internal panel through a mux that
++//! can be flipped at runtime between the iGPU and the dGPU. A patched `nvidia-modeset` exposes the
++//! mux as module parameters:
++//!
++//! - `/sys/module/nvidia_modeset/parameters/mux`: write `igpu` | `dgpu`, reads back `igpu` | `dgpu`
++//!   | `unknown`. A failed write returns EIO, a wedged driver can block the writer forever
++//!   (uninterruptible sleep).
++//! - `/sys/module/nvidia_modeset/parameters/mux_igpu_brightness`: brightness (0-100) handed over to
++//!   the dGPU panel when switching.
++//!
++//! [`MuxController`] ports the proven shell sequence: it drives the mux, forces connector
++//! detection, sends synthetic DRM hotplug uevents so the compositor picks up the panel on the new
++//! GPU, and reverts to the iGPU on any failure.
++//!
++//! Every sysfs access that reaches a driver runs on a dedicated, detached `std::thread` with a
++//! timeout (see [`sysfs_io`]): a thread stuck in D-state must neither stall the tokio runtime nor
++//! its shutdown, so `spawn_blocking` is deliberately not used for those (only for procfs reads,
++//! which can't hang in a driver).
++
++use log::{error, info, warn};
++use std::{
++    fs, io, path::{Path, PathBuf}, sync::{
++        Mutex, OnceLock, atomic::{AtomicBool, Ordering}
++    }, time::{Duration, Instant}
++};
++use thiserror::Error;
++use zbus::object_server::SignalEmitter;
++
++/// nvidia-modeset mux parameter.
++const MUX_PARAM: &str = "/sys/module/nvidia_modeset/parameters/mux";
++/// nvidia-modeset brightness handover parameter (0-100).
++const MUX_BRIGHTNESS_PARAM: &str = "/sys/module/nvidia_modeset/parameters/mux_igpu_brightness";
++/// acpi_call interface used as a last resort when the driver path is wedged.
++const ACPI_CALL: &str = "/proc/acpi/call";
++/// ACPI method switching the panel mux back to the iGPU (ASUS G14 2025).
++const ACPI_MXDS_IGPU: &str = "\\_SB.PCI0.GPP9.PEGP.LCD0.MXDS 0x1";
++
++/// Timeout of a mux parameter write before the driver path is considered wedged.
++const MUX_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
++/// Timeout of a single "ordinary" sysfs access (connector status, uevent, power control...).
++const SYSFS_TIMEOUT: Duration = Duration::from_secs(3);
++/// How long to wait for the target eDP connector to report `connected`.
++const DETECT_TIMEOUT: Duration = Duration::from_secs(8);
++/// How long to wait for the compositor to light the dGPU eDP connector.
++const ENABLE_TIMEOUT: Duration = Duration::from_secs(5);
++/// Overall deadline of an enter sequence, measured from the mux write: past it, revert.
++const ENTER_DEADLINE: Duration = Duration::from_secs(20);
++/// Delay between polls of a connector.
++const POLL_INTERVAL: Duration = Duration::from_millis(250);
++/// Settle time between lighting the iGPU panel and turning the dGPU connector off.
++const LEAVE_SETTLE: Duration = Duration::from_secs(1);
++/// After the panel is lit on the iGPU, time for the compositor to move its renderer off the
++/// dGPU (renderer re-creation is deferred) before a mode that blocks the dGPU is applied.
++pub const RENDER_SETTLE: Duration = Duration::from_secs(2);
++
++/// GPU currently driving the internal panel, as reported by the mux parameter.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum PanelGpu {
++    Igpu,
++    Dgpu,
++    Unknown,
++}
++
++impl PanelGpu {
++    pub fn as_str(self) -> &'static str {
++        match self {
++            PanelGpu::Igpu => "igpu",
++            PanelGpu::Dgpu => "dgpu",
++            PanelGpu::Unknown => "unknown",
++        }
++    }
++
++    fn parse(value: &str) -> Self {
++        match value.trim() {
++            "igpu" => PanelGpu::Igpu,
++            "dgpu" => PanelGpu::Dgpu,
++            _ => PanelGpu::Unknown,
++        }
++    }
++}
++
++/// State of the mux controller exposed on D-Bus.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum MuxState {
++    /// Nothing in flight.
++    Idle,
++    /// A switch sequence is running.
++    Switching,
++    /// Ultimate is the persisted mode but was not applied yet (early boot / after resume),
++    /// waiting for `ApplyPending`.
++    Pending,
++    /// The panel could not be moved back to the iGPU, or the driver path is wedged.
++    Degraded,
++}
++
++impl MuxState {
++    pub fn as_str(self) -> &'static str {
++        match self {
++            MuxState::Idle => "idle",
++            MuxState::Switching => "switching",
++            MuxState::Pending => "pending",
++            MuxState::Degraded => "degraded",
++        }
++    }
++}
++
++#[derive(Debug, Error)]
++pub enum MuxError {
++    #[error("live display mux not available: {0}")]
++    NotCapable(String),
++
++    #[error(
++        "the nvidia-modeset mux driver path is wedged, switching to the dGPU is disabled until reboot"
++    )]
++    Wedged,
++
++    #[error("{path}: {source}")]
++    Io { path: String, source: io::Error },
++
++    #[error("timed out after {}ms: {what}", .timeout.as_millis())]
++    Timeout { what: String, timeout: Duration },
++
++    #[error("{0}")]
++    Step(String),
++
++    #[error("switch to the dGPU failed ({cause}), the panel was reverted to the iGPU")]
++    Reverted { cause: Box<MuxError> },
++
++    #[error("switch to the dGPU failed ({cause}) and reverting to the iGPU failed too ({revert})")]
++    RevertFailed {
++        cause: Box<MuxError>,
++        revert: Box<MuxError>,
++    },
++}
++
++/// A GPU the mux topology can be resolved from.
++#[derive(Clone, Debug)]
++pub struct MuxGpu {
++    pub pci: String,
++    pub nvidia: bool,
++}
++
++/// Resolved sysfs paths for both sides of the mux.
++///
++/// Card numbers can change between boots, everything is resolved from the PCI addresses.
++#[derive(Clone, Debug)]
++pub struct MuxTopology {
++    pub igpu_pci: String,
++    pub dgpu_pci: String,
++    /// e.g. `card1`
++    pub igpu_card: String,
++    pub dgpu_card: String,
++    /// e.g. `/sys/class/drm/card1-eDP-1`
++    pub igpu_edp: PathBuf,
++    pub dgpu_edp: PathBuf,
++}
++
++#[derive(Default)]
++struct MuxRuntime {
++    switching: bool,
++    pending: bool,
++    degraded: bool,
++    last_error: String,
++}
++
++/// Drives the live display mux. Not reentrant: callers serialize through the mode transition
++/// lock.
++pub struct MuxController {
++    runtime: Mutex<MuxRuntime>,
++    /// Set once a mux write timed out or failed: the driver path is not trusted anymore.
++    wedged: AtomicBool,
++    /// Signal emitter of the Mux D-Bus interface, populated once the interface is served.
++    pub signal_emitter: OnceLock<SignalEmitter<'static>>,
++}
++
++impl Default for MuxController {
++    fn default() -> Self {
++        Self::new()
++    }
++}
++
++impl MuxController {
++    pub fn new() -> Self {
++        Self {
++            runtime: Mutex::new(MuxRuntime::default()),
++            wedged: AtomicBool::new(false),
++            signal_emitter: OnceLock::new(),
++        }
++    }
++
++    fn runtime(&self) -> std::sync::MutexGuard<'_, MuxRuntime> {
++        // A poisoned lock only means a panic while holding plain flags: keep going
++        self.runtime.lock().unwrap_or_else(|e| e.into_inner())
++    }
++
++    /// Current state as exposed on D-Bus.
++    pub fn state(&self) -> MuxState {
++        let runtime = self.runtime();
++        if runtime.switching {
++            MuxState::Switching
++        } else if runtime.degraded || self.is_wedged() {
++            MuxState::Degraded
++        } else if runtime.pending {
++            MuxState::Pending
++        } else {
++            MuxState::Idle
++        }
++    }
++
++    pub fn last_error(&self) -> String {
++        self.runtime().last_error.clone()
++    }
++
++    pub fn set_last_error(&self, err: impl Into<String>) {
++        self.runtime().last_error = err.into();
++    }
++
++    pub fn is_pending(&self) -> bool {
++        self.runtime().pending
++    }
++
++    pub fn set_pending(&self, pending: bool) {
++        self.runtime().pending = pending;
++    }
++
++    pub fn set_switching(&self, switching: bool) {
++        self.runtime().switching = switching;
++    }
++
++    pub fn is_degraded(&self) -> bool {
++        self.runtime().degraded || self.is_wedged()
++    }
++
++    /// Mark the panel as possibly stranded on the dGPU.
++    pub fn set_degraded(&self, err: impl Into<String>) {
++        let mut runtime = self.runtime();
++        runtime.degraded = true;
++        runtime.last_error = err.into();
++    }
++
++    /// Clear the degraded flag once the panel is known to be back on the iGPU. The wedged flag is
++    /// sticky until reboot.
++    pub fn clear_degraded(&self) {
++        self.runtime().degraded = false;
++    }
++
++    pub fn is_wedged(&self) -> bool {
++        self.wedged.load(Ordering::Relaxed)
++    }
++
++    /// Whether the patched nvidia-modeset exposes the mux parameter.
++    pub fn param_present(&self) -> bool {
++        Path::new(MUX_PARAM).exists()
++    }
++
++    /// Read which GPU drives the panel. `Unknown` when the parameter is missing, unreadable or
++    /// does not answer in time.
++    pub async fn panel_gpu(&self) -> PanelGpu {
++        if !self.param_present() {
++            return PanelGpu::Unknown;
++        }
++        match sysfs_io(format!("read {MUX_PARAM}"), SYSFS_TIMEOUT, || {
++            fs::read_to_string(MUX_PARAM)
++        })
++        .await
++        {
++            Ok(value) => PanelGpu::parse(&value),
++            Err(err) => {
++                warn!("mux: could not read the mux state: {err}");
++                PanelGpu::Unknown
++            }
++        }
++    }
++
++    /// Whether Ultimate can be offered on this system.
++    ///
++    /// Requires the mux parameter to read `igpu` or `dgpu`, an available NVIDIA GPU owning an eDP
++    /// connector and an iGPU owning an eDP connector.
++    pub async fn probe(&self, gpus: &[MuxGpu]) -> bool {
++        if !self.param_present() {
++            return false;
++        }
++        if self.panel_gpu().await == PanelGpu::Unknown {
++            return false;
++        }
++        self.resolve(gpus).is_ok()
++    }
++
++    /// Resolve the DRM cards and eDP connectors of both GPUs from their PCI addresses.
++    pub fn resolve(&self, gpus: &[MuxGpu]) -> Result<MuxTopology, MuxError> {
++        let find = |nvidia: bool| {
++            gpus.iter()
++                .filter(|gpu| gpu.nvidia == nvidia)
++                .find_map(|gpu| {
++                    let card = drm_card_for_pci(&gpu.pci)?;
++                    let edp = edp_connector(&gpu.pci, &card)?;
++                    Some((gpu.pci.clone(), card, edp))
++                })
++        };
++        let (dgpu_pci, dgpu_card, dgpu_edp) = find(true).ok_or_else(|| {
++            MuxError::NotCapable("no available NVIDIA GPU with an eDP connector".to_string())
++        })?;
++        let (igpu_pci, igpu_card, igpu_edp) = find(false).ok_or_else(|| {
++            MuxError::NotCapable("no available integrated GPU with an eDP connector".to_string())
++        })?;
++        Ok(MuxTopology {
++            igpu_pci,
++            dgpu_pci,
++            igpu_card,
++            dgpu_card,
++            igpu_edp,
++            dgpu_edp,
++        })
++    }
++
++    /// Whether the dGPU eDP connector reports `connected`.
++    pub async fn dgpu_panel_connected(&self, topo: &MuxTopology) -> bool {
++        read_attr(&topo.dgpu_edp.join("status"))
++            .await
++            .is_ok_and(|status| status == "connected")
++    }
++
++    /// Move the internal panel to the dGPU.
++    ///
++    /// Any failure after the mux write, or missing the overall deadline before the compositor lit
++    /// the dGPU panel, reverts the panel to the iGPU.
++    pub async fn enter_dgpu(&self, topo: &MuxTopology) -> Result<(), MuxError> {
++        if self.is_wedged() {
++            return Err(MuxError::Wedged);
++        }
++        info!(
++            "mux: entering dGPU (iGPU {} {} -> dGPU {} {})",
++            topo.igpu_pci,
++            topo.igpu_edp.display(),
++            topo.dgpu_pci,
++            topo.dgpu_edp.display()
++        );
++        let started = Instant::now();
++
++        // (1) Keep the dGPU awake for the whole sequence
++        let power = power_control(&topo.dgpu_pci);
++        info!(
++            "mux: [1/7] forcing dGPU runtime PM on ({})",
++            power.display()
++        );
++        write_attr(&power, "on").await?;
++
++        // (2) Hand over the current iGPU backlight level
++        match igpu_brightness_percent().await {
++            Some(percent) => {
++                info!("mux: [2/7] handing over brightness {percent}%");
++                if let Err(err) =
++                    write_attr(Path::new(MUX_BRIGHTNESS_PARAM), &percent.to_string()).await
++                {
++                    warn!("mux: could not hand over the brightness: {err}");
++                }
++            }
++            None => warn!("mux: [2/7] no amdgpu backlight found, skipping brightness handover"),
++        }
++
++        // (3..6) under a deadline, (3) included as the mux write itself can hang
++        info!("mux: [3/7] switching mux to dgpu");
++        let result = match tokio::time::timeout(ENTER_DEADLINE, self.enter_dgpu_inner(topo)).await {
++            Ok(result) => result,
++            Err(_) => Err(MuxError::Timeout {
++                what: "dGPU panel was not lit before the safety deadline".to_string(),
++                timeout: ENTER_DEADLINE,
++            }),
++        };
++
++        if let Err(cause) = result {
++            error!("mux: entering dGPU failed: {cause}; reverting to the iGPU");
++            return match self.leave_to_igpu(topo, true).await {
++                Ok(()) => Err(MuxError::Reverted {
++                    cause: Box::new(cause),
++                }),
++                Err(revert) => {
++                    error!("mux: revert to the iGPU failed: {revert}");
++                    Err(MuxError::RevertFailed {
++                        cause: Box::new(cause),
++                        revert: Box::new(revert),
++                    })
++                }
++            };
++        }
++
++        // (7) The dGPU panel is lit: turn the iGPU connector off and tell the compositor.
++        // Best effort, the panel is already usable.
++        info!(
++            "mux: [7/7] turning {} off and notifying {}",
++            topo.igpu_edp.display(),
++            topo.igpu_card
++        );
++        if let Err(err) = write_attr(&topo.igpu_edp.join("status"), "off").await {
++            warn!("mux: could not turn the iGPU eDP connector off: {err}");
++        }
++        if let Err(err) = synthetic_hotplug(&topo.igpu_card).await {
++            warn!("mux: hotplug on {} failed: {err}", topo.igpu_card);
++        }
++        info!(
++            "mux: panel is on the dGPU (took {} ms)",
++            started.elapsed().as_millis()
++        );
++        Ok(())
++    }
++
++    /// Steps 3 to 6 of the enter sequence.
++    async fn enter_dgpu_inner(&self, topo: &MuxTopology) -> Result<(), MuxError> {
++        // (3) Flip the mux
++        self.write_mux("dgpu").await?;
++
++        // (4) Force detection until the dGPU connector sees the panel
++        info!(
++            "mux: [4/7] waiting for {} to be connected",
++            topo.dgpu_edp.display()
++        );
++        poll_detect(&topo.dgpu_edp, DETECT_TIMEOUT).await?;
++
++        // (5) Tell the compositor the dGPU has a new panel
++        info!("mux: [5/7] synthetic hotplug on {}", topo.dgpu_card);
++        synthetic_hotplug(&topo.dgpu_card).await?;
++
++        // (6) Wait for the compositor to light it
++        info!(
++            "mux: [6/7] waiting for the compositor to enable {}",
++            topo.dgpu_edp.display()
++        );
++        let enabled = topo.dgpu_edp.join("enabled");
++        let deadline = Instant::now() + ENABLE_TIMEOUT;
++        loop {
++            if read_attr(&enabled).await.is_ok_and(|v| v == "enabled") {
++                return Ok(());
++            }
++            if Instant::now() >= deadline {
++                return Err(MuxError::Timeout {
++                    what: format!("{} was not enabled by the compositor", enabled.display()),
++                    timeout: ENABLE_TIMEOUT,
++                });
++            }
++            tokio::time::sleep(POLL_INTERVAL).await;
++        }
++    }
++
++    /// Move the internal panel back to the iGPU.
++    /// With `wait_lit` false (shutdown: the compositor may be gone and logind only waits a few
++    /// seconds) the dGPU connector is dropped without waiting for the iGPU panel to be lit.
++    pub async fn leave_to_igpu(&self, topo: &MuxTopology, wait_lit: bool) -> Result<(), MuxError> {
++        info!(
++            "mux: leaving to iGPU (dGPU {} -> iGPU {})",
++            topo.dgpu_edp.display(),
++            topo.igpu_edp.display()
++        );
++
++        // (1) Flip the mux, through the driver unless it is known to be wedged
++        info!("mux: [1/5] switching mux to igpu");
++        let driver_result = if self.is_wedged() {
++            Err(MuxError::Wedged)
++        } else {
++            self.write_mux("igpu").await
++        };
++        if let Err(err) = driver_result {
++            warn!("mux: driver path failed ({err}), falling back to ACPI");
++            self.wedged.store(true, Ordering::Relaxed);
++            acpi_mux_to_igpu().await?;
++        }
++
++        // (2) Wait for the iGPU connector to see the panel, then tell the compositor
++        info!(
++            "mux: [2/5] waiting for {} to be connected",
++            topo.igpu_edp.display()
++        );
++        let detected = poll_detect(&topo.igpu_edp, DETECT_TIMEOUT).await;
++        if let Err(err) = synthetic_hotplug(&topo.igpu_card).await {
++            warn!("mux: hotplug on {} failed: {err}", topo.igpu_card);
++        }
++        // Without the iGPU seeing the panel, turning the dGPU connector off could leave the
++        // user with a black screen: stop here.
++        detected?;
++
++        // (3) Wait until the iGPU panel is actually lit (compositor or fbcon) before dropping
++        // the dGPU connector. A compositor that still renders on the dGPU may only manage
++        // that once the dGPU connector is gone (that's what moves its renderer), so if it
++        // isn't lit in time, drop the dGPU connector anyway and wait once more.
++        let igpu_enabled = topo.igpu_edp.join("enabled");
++        info!(
++            "mux: [3/5] waiting for {} to be lit",
++            topo.igpu_edp.display()
++        );
++        let mut lit = !wait_lit;
++        if wait_lit {
++            tokio::time::sleep(LEAVE_SETTLE).await;
++            lit = wait_enabled(&igpu_enabled, ENABLE_TIMEOUT).await;
++        }
++        if !lit {
++            warn!(
++                "mux: {} not lit yet, dropping the dGPU connector anyway",
++                topo.igpu_edp.display()
++            );
++        }
++
++        // (4) Drop the dGPU connector
++        info!(
++            "mux: [4/5] turning {} off and notifying {}",
++            topo.dgpu_edp.display(),
++            topo.dgpu_card
++        );
++        if let Err(err) = write_attr(&topo.dgpu_edp.join("status"), "off").await {
++            warn!("mux: could not turn the dGPU eDP connector off: {err}");
++        }
++        if let Err(err) = synthetic_hotplug(&topo.dgpu_card).await {
++            warn!("mux: hotplug on {} failed: {err}", topo.dgpu_card);
++        }
++        if !lit {
++            lit = wait_enabled(&igpu_enabled, ENABLE_TIMEOUT).await;
++        }
++
++        // (5) Let the dGPU runtime suspend again
++        let power = power_control(&topo.dgpu_pci);
++        info!("mux: [5/5] restoring dGPU runtime PM ({})", power.display());
++        if let Err(err) = write_attr(&power, "auto").await {
++            warn!("mux: could not restore dGPU runtime PM: {err}");
++        }
++
++        if !lit {
++            // The panel is on the iGPU, but nothing displays on it. Report it so that modes
++            // which block the dGPU are refused (the compositor may still render there).
++            return Err(MuxError::Timeout {
++                what: format!(
++                    "{} was not lit by the compositor after the switch",
++                    igpu_enabled.display()
++                ),
++                timeout: ENABLE_TIMEOUT,
++            });
++        }
++        info!("mux: panel is on the iGPU");
++        Ok(())
++    }
++
++    /// Write the mux parameter on a dedicated thread. A timeout (writer stuck in the driver)
++    /// marks the driver path as wedged; [`Self::leave_to_igpu`] also marks it on plain errors.
++    async fn write_mux(&self, target: &'static str) -> Result<(), MuxError> {
++        let result = sysfs_io(
++            format!("write {target} to {MUX_PARAM}"),
++            MUX_WRITE_TIMEOUT,
++            move || fs::write(MUX_PARAM, target),
++        )
++        .await;
++        match &result {
++            Err(err @ MuxError::Timeout { .. }) => {
++                error!("mux: writing {target} to the mux hung: {err}; marking driver path wedged");
++                self.wedged.store(true, Ordering::Relaxed);
++            }
++            Err(err) => error!("mux: writing {target} to the mux failed: {err}"),
++            Ok(()) => {}
++        }
++        result
++    }
++}
++
++/// Last resort: flip the mux back to the iGPU through acpi_call.
++async fn acpi_mux_to_igpu() -> Result<(), MuxError> {
++    if !Path::new(ACPI_CALL).exists() {
++        return Err(MuxError::Step(format!(
++            "{ACPI_CALL} is not available, cannot fall back to ACPI"
++        )));
++    }
++    info!("mux: calling {ACPI_MXDS_IGPU} through {ACPI_CALL}");
++    write_attr(Path::new(ACPI_CALL), ACPI_MXDS_IGPU).await?;
++    match read_attr(Path::new(ACPI_CALL)).await {
++        Ok(answer) if answer.starts_with("Error") => Err(MuxError::Step(format!(
++            "ACPI call {ACPI_MXDS_IGPU} failed: {answer}"
++        ))),
++        Ok(answer) => {
++            info!("mux: ACPI call answered: {answer}");
++            Ok(())
++        }
++        Err(err) => {
++            warn!("mux: could not read the ACPI call answer: {err}");
++            Ok(())
++        }
++    }
++}
++
++/// Force detection on a connector until it reports `connected`.
++async fn poll_detect(connector: &Path, timeout: Duration) -> Result<(), MuxError> {
++    let status = connector.join("status");
++    let deadline = Instant::now() + timeout;
++    loop {
++        if let Err(err) = write_attr(&status, "detect").await {
++            warn!("mux: detect on {} failed: {err}", status.display());
++        }
++        if read_attr(&status).await.is_ok_and(|s| s == "connected") {
++            return Ok(());
++        }
++        if Instant::now() >= deadline {
++            return Err(MuxError::Timeout {
++                what: format!("{} never reported connected", connector.display()),
++                timeout,
++            });
++        }
++        tokio::time::sleep(POLL_INTERVAL).await;
++    }
++}
++
++/// Send a synthetic `change` uevent on a DRM card, tagged so a udev rule turns it into
++/// `HOTPLUG=1` for the compositor.
++async fn synthetic_hotplug(card: &str) -> Result<(), MuxError> {
++    let uuid = read_attr(Path::new("/proc/sys/kernel/random/uuid")).await?;
++    // The kernel only accepts alphanumeric keys: SYNTH_ARG_MUXHOTPLUG=1 is mapped to HOTPLUG=1
++    // by udev
++    let payload = format!("change {uuid} MUXHOTPLUG=1");
++    let uevent = Path::new("/sys/class/drm").join(card).join("uevent");
++    write_attr(&uevent, &payload).await
++}
++
++/// Whether a compositor holds the dGPU's DRM card: some process that has both GPUs' card nodes
++/// open, other than session plumbing. Without it nothing can light the panel on the dGPU (the
++/// nvidia fbdev console would still make the connector read "enabled").
++///
++/// A compositor that started while the dGPU was blocked (Integrated/Smart at login) never gets
++/// it: NVIDIA's EGL does not re-scan devices inside a running process, so offering it the card
++/// later doesn't help (wlroots falls back to its experimental Vulkan renderer and hangs).
++pub async fn compositor_holds_dgpu(topo: &MuxTopology) -> bool {
++    const NOT_A_COMPOSITOR: [&str; 5] = [
++        "systemd",
++        "systemd-logind",
++        "Xwayland",
++        ".cardwired-wrap",
++        "cardwired",
++    ];
++    let igpu = format!("/dev/dri/{}", topo.igpu_card);
++    let dgpu = format!("/dev/dri/{}", topo.dgpu_card);
++    let result = tokio::task::spawn_blocking(move || -> io::Result<bool> {
++        let on_igpu = crate::core::procfs::lsof_read(&igpu)?;
++        let on_dgpu = crate::core::procfs::lsof_read(&dgpu)?;
++        Ok(on_dgpu
++            .iter()
++            .any(|p| !NOT_A_COMPOSITOR.contains(&p.as_str()) && on_igpu.contains(p)))
++    })
++    .await;
++    matches!(result, Ok(Ok(true)))
++}
++
++/// Current amdgpu backlight level in percent.
++async fn igpu_brightness_percent() -> Option<u32> {
++    let mut entries = tokio::fs::read_dir("/sys/class/backlight").await.ok()?;
++    while let Ok(Some(entry)) = entries.next_entry().await {
++        if !entry.file_name().to_string_lossy().starts_with("amdgpu_bl") {
++            continue;
++        }
++        let path = entry.path();
++        let brightness: u64 = read_attr(&path.join("brightness"))
++            .await
++            .ok()?
++            .parse()
++            .ok()?;
++        let max: u64 = read_attr(&path.join("max_brightness"))
++            .await
++            .ok()?
++            .parse()
++            .ok()?;
++        return brightness_percent(brightness, max);
++    }
++    None
++}
++
++fn brightness_percent(brightness: u64, max: u64) -> Option<u32> {
++    if max == 0 {
++        return None;
++    }
++    let percent = brightness.saturating_mul(100) / max;
++    Some(percent.min(100) as u32)
++}
++
++fn power_control(pci: &str) -> PathBuf {
++    Path::new("/sys/bus/pci/devices")
++        .join(pci)
++        .join("power/control")
++}
++
++/// Find the DRM card (e.g. `card1`) owned by a PCI device.
++fn drm_card_for_pci(pci: &str) -> Option<String> {
++    let drm_dir = Path::new("/sys/bus/pci/devices").join(pci).join("drm");
++    fs::read_dir(drm_dir).ok()?.flatten().find_map(|entry| {
++        let name = entry.file_name().to_string_lossy().into_owned();
++        let is_card = name
++            .strip_prefix("card")
++            .is_some_and(|num| !num.is_empty() && num.chars().all(|c| c.is_ascii_digit()));
++        is_card.then_some(name)
++    })
++}
++
++/// Find the eDP connector of a card, returned as its `/sys/class/drm` path.
++fn edp_connector(pci: &str, card: &str) -> Option<PathBuf> {
++    let card_dir = Path::new("/sys/bus/pci/devices")
++        .join(pci)
++        .join("drm")
++        .join(card);
++    let prefix = format!("{card}-eDP-");
++    let mut connectors: Vec<String> = fs::read_dir(card_dir)
++        .ok()?
++        .flatten()
++        .map(|entry| entry.file_name().to_string_lossy().into_owned())
++        .filter(|name| name.starts_with(&prefix))
++        .collect();
++    connectors.sort();
++    connectors
++        .into_iter()
++        .next()
++        .map(|name| Path::new("/sys/class/drm").join(name))
++}
++
++/// Synchronous mux read used by the default GPU heuristic, bounded by a timeout.
++pub fn panel_on_dgpu_blocking() -> bool {
++    if !Path::new(MUX_PARAM).exists() {
++        return false;
++    }
++    let (tx, rx) = std::sync::mpsc::channel();
++    let spawned = std::thread::Builder::new()
++        .name("cardwire-mux-read".to_string())
++        .spawn(move || {
++            let _ = tx.send(fs::read_to_string(MUX_PARAM));
++        });
++    if spawned.is_err() {
++        return false;
++    }
++    matches!(rx.recv_timeout(SYSFS_TIMEOUT), Ok(Ok(value)) if PanelGpu::parse(&value) == PanelGpu::Dgpu)
++}
++
++async fn read_attr(path: &Path) -> Result<String, MuxError> {
++    let owned = path.to_path_buf();
++    sysfs_io(
++        format!("read {}", path.display()),
++        SYSFS_TIMEOUT,
++        move || fs::read_to_string(owned).map(|value| value.trim().to_string()),
++    )
++    .await
++}
++
++async fn write_attr(path: &Path, value: &str) -> Result<(), MuxError> {
++    let owned = path.to_path_buf();
++    let value = value.to_string();
++    sysfs_io(
++        format!("write {}", path.display()),
++        SYSFS_TIMEOUT,
++        move || fs::write(owned, value),
++    )
++    .await
++}
++
++/// Run a sysfs access on a dedicated detached thread, bounded by a timeout.
++///
++/// On timeout the thread is abandoned: if it is stuck in uninterruptible sleep it leaks, but
++/// neither the runtime nor its shutdown wait on it.
++async fn sysfs_io<T, F>(what: String, timeout: Duration, op: F) -> Result<T, MuxError>
++where
++    T: Send + 'static,
++    F: FnOnce() -> io::Result<T> + Send + 'static,
++{
++    let (tx, rx) = tokio::sync::oneshot::channel();
++    std::thread::Builder::new()
++        .name("cardwire-mux-io".to_string())
++        .spawn(move || {
++            let _ = tx.send(op());
++        })
++        .map_err(|source| MuxError::Io {
++            path: what.clone(),
++            source,
++        })?;
++    match tokio::time::timeout(timeout, rx).await {
++        Ok(Ok(Ok(value))) => Ok(value),
++        Ok(Ok(Err(source))) => Err(MuxError::Io { path: what, source }),
++        Ok(Err(_)) => Err(MuxError::Step(format!("{what}: worker thread vanished"))),
++        Err(_) => Err(MuxError::Timeout { what, timeout }),
++    }
++}
++
++/// Poll a DRM connector's `enabled` attribute until it reads "enabled" or the timeout expires.
++async fn wait_enabled(path: &Path, timeout: Duration) -> bool {
++    let deadline = Instant::now() + timeout;
++    loop {
++        if read_attr(path).await.is_ok_and(|v| v == "enabled") {
++            return true;
++        }
++        if Instant::now() >= deadline {
++            return false;
++        }
++        tokio::time::sleep(POLL_INTERVAL).await;
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn test_panel_gpu_parse() {
++        assert_eq!(PanelGpu::parse("igpu\n"), PanelGpu::Igpu);
++        assert_eq!(PanelGpu::parse("dgpu"), PanelGpu::Dgpu);
++        assert_eq!(PanelGpu::parse("unknown"), PanelGpu::Unknown);
++        assert_eq!(PanelGpu::parse(""), PanelGpu::Unknown);
++    }
++
++    #[test]
++    fn test_brightness_percent() {
++        assert_eq!(brightness_percent(0, 255), Some(0));
++        assert_eq!(brightness_percent(255, 255), Some(100));
++        assert_eq!(brightness_percent(128, 255), Some(50));
++        assert_eq!(brightness_percent(300, 255), Some(100));
++        assert_eq!(brightness_percent(10, 0), None);
++    }
++
++    #[test]
++    fn test_state_priority() {
++        let mux = MuxController::new();
++        assert_eq!(mux.state(), MuxState::Idle);
++        mux.set_pending(true);
++        assert_eq!(mux.state(), MuxState::Pending);
++        mux.set_degraded("boom");
++        assert_eq!(mux.state(), MuxState::Degraded);
++        assert_eq!(mux.last_error(), "boom");
++        mux.set_switching(true);
++        assert_eq!(mux.state(), MuxState::Switching);
++        mux.set_switching(false);
++        mux.clear_degraded();
++        assert_eq!(mux.state(), MuxState::Pending);
++    }
++
++    #[tokio::test]
++    async fn test_sysfs_io_timeout() {
++        let res = sysfs_io("sleep".to_string(), Duration::from_millis(50), || {
++            std::thread::sleep(Duration::from_millis(500));
++            Ok(())
++        })
++        .await;
++        assert!(matches!(res, Err(MuxError::Timeout { .. })));
++    }
++
++    #[tokio::test]
++    async fn test_sysfs_io_error() {
++        let res: Result<String, _> = sysfs_io("missing".to_string(), SYSFS_TIMEOUT, || {
++            fs::read_to_string("/nonexistent/cardwire/mux")
++        })
++        .await;
++        assert!(matches!(res, Err(MuxError::Io { .. })));
++    }
++}
+diff --git a/crates/cardwire-daemon/src/daemon.rs b/crates/cardwire-daemon/src/daemon.rs
+index 8b6e672..7ff3e41 100644
+--- a/crates/cardwire-daemon/src/daemon.rs
++++ b/crates/cardwire-daemon/src/daemon.rs
+@@ -116,6 +116,7 @@ async fn main() -> Result<()> {
+         }
+     }
+     task::spawn(daemon.battery_switch_future());
++    task::spawn(daemon.logind_future());
+     task::spawn(daemon.monitor_udev_future());
+     task::spawn(daemon.monitor_display_future());
+     task::spawn(daemon.run_analyzer());
+@@ -159,6 +160,25 @@ async fn spawn_dbus_api(
+     object_server
+         .at(path, daemon.mode_interface.clone())
+         .await?;
++    // cardwire.Mux
++    object_server.at(path, daemon.mux_interface.clone()).await?;
++    match object_server
++        .interface::<_, crate::interface::MuxInterface>(path)
++        .await
++    {
++        Ok(mux_ref) => {
++            daemon
++                .mode_interface
++                .mux
++                .signal_emitter
++                .get_or_init(|| mux_ref.signal_emitter().to_owned());
++        }
++        Err(e) => {
++            log::warn!(
++                "Failed to get the Mux interface ({e}); mux change notifications will not be emitted"
++            );
++        }
++    }
+     // Cardwire logger
+     object_server
+         .at(path, daemon.logger_interface.clone())
+diff --git a/crates/cardwire-daemon/src/interface/debug.rs b/crates/cardwire-daemon/src/interface/debug.rs
+index adfaee0..ddcbfc7 100644
+--- a/crates/cardwire-daemon/src/interface/debug.rs
++++ b/crates/cardwire-daemon/src/interface/debug.rs
+@@ -208,7 +208,8 @@ impl DebugInterface {
+ 
+             // Re-apply the persisted mode against the new GPU list
+             let requested = match CardwireModeState::build() {
+-                Ok(state) => state.mode(),
++                // A pending Ultimate stays Hybrid until ApplyPending
++                Ok(state) => self.mode_interface.effective_persisted_mode(state.mode()),
+                 Err(e) => {
+                     warn!("failed to read persisted mode on hotplug, using hybrid: {e}");
+                     Modes::Hybrid
+diff --git a/crates/cardwire-daemon/src/interface/mod.rs b/crates/cardwire-daemon/src/interface/mod.rs
+index 076aa76..a3d493e 100644
+--- a/crates/cardwire-daemon/src/interface/mod.rs
++++ b/crates/cardwire-daemon/src/interface/mod.rs
+@@ -4,6 +4,7 @@ mod debug;
+ mod gpu;
+ mod logger;
+ mod mode;
++pub(crate) mod mux;
+ mod smart;
+ mod switcheroo;
+ 
+@@ -13,5 +14,6 @@ pub use debug::DebugInterface;
+ pub use gpu::{GpuInterface, GpuInterfaceSignals};
+ pub use logger::{LogEntry, LoggerInterface, LoggerInterfaceSignals};
+ pub use mode::{ModeInterface, Modes};
++pub use mux::MuxInterface;
+ pub use smart::SmartPolicyInterface;
+ pub use switcheroo::SwitcherooInterface;
+diff --git a/crates/cardwire-daemon/src/interface/mode.rs b/crates/cardwire-daemon/src/interface/mode.rs
+index 9d38212..94ceabc 100644
+--- a/crates/cardwire-daemon/src/interface/mode.rs
++++ b/crates/cardwire-daemon/src/interface/mode.rs
+@@ -1,7 +1,7 @@
+ //! Define the mode dbus
+ use crate::{
+     Result, core::{
+-        errors::CardwireError, gpu::{start_nvidia_powerd, stop_nvidia_powerd}
++        errors::CardwireError, gpu::{GpuVendor, start_nvidia_powerd, stop_nvidia_powerd}, mux::{MuxController, MuxError, MuxGpu, PanelGpu}
+     }, file::{CardwireGpuState, CardwireModeState}, interface::{DaemonContext, GpuInterface, SwitcherooInterface, config::ConfigMemory}, types::SystemType
+ };
+ use aya::maps::Array as AyaArray;
+@@ -31,6 +31,8 @@ pub struct ModeInterface {
+     // served
+     pub signal_emitter: Arc<OnceLock<SignalEmitter<'static>>>,
+     pub switcheroo_int: SwitcherooInterface,
++    // Live display mux driver (Ultimate mode)
++    pub mux: Arc<MuxController>,
+ }
+ 
+ impl ModeInterface {
+@@ -51,36 +53,65 @@ impl ModeInterface {
+             nvidia_powerd_lock: Arc::new(Mutex::new(())),
+             signal_emitter: Arc::new(OnceLock::new()),
+             switcheroo_int,
++            mux: Arc::new(MuxController::new()),
+         })
+     }
+ 
+     /// set the mode in the `cardwire_mode` bpf map
+     async fn update_mode_bpf_map(&self, mode: Modes) -> fdo::Result<()> {
+         let mut mode_map = self.mode_map.lock().await;
+-        let mode: u32 = Modes::into(mode);
++        // Ultimate is written as Hybrid, the eBPF program does not know about it
++        let mode: u32 = mode.ebpf_value();
+         mode_map
+             .set(0, mode as u8, 0)
+             .map_err(|err| fdo::Error::Failed(err.to_string()))
+     }
+ 
+     /// Apply a mode and optionally persist it to the state file
++    ///
++    /// Every mode change (D-Bus, battery switch, external display, gpu refresh) goes through
++    /// here, so the live display mux is always handled under the same transition lock:
++    /// - entering Ultimate applies the Hybrid blocking policy, then moves the panel to the dGPU;
++    /// - leaving Ultimate moves the panel back to the iGPU first, then applies the new mode. If the
++    ///   panel can't be moved back, only Hybrid is allowed.
+     pub async fn internal_set_mode(&self, mode: Modes, save: bool) -> Result<()> {
+         let _transition = self.transition.lock().await;
+-        self.apply_mode(mode).await?;
+-        // Save
+-        {
+-            let mut state = self.mode_state.write().await;
+-            if let Err(e) = state.save_state(mode, save).await {
+-                warn!("mode couldn't be saved to config: {e}");
+-            }
+-        }
++        let result = self.set_mode_locked(mode, save).await;
++        self.emit_mux_changed().await;
++        result
++    }
+ 
+-        if let Some(emitter) = self.signal_emitter.get()
+-            && let Err(err) = self.mode_changed(emitter).await
+-        {
+-            warn!("failed to emit mode change signal: {err}");
+-        };
++    /// Whether a mode transition (possibly a live panel switch) is running right now.
++    pub fn transition_in_progress(&self) -> bool {
++        self.transition.try_lock().is_err()
++    }
+ 
++    /// Automatic mode change (display/hotplug reconcile): only applied if the mode is still
++    /// `expected` once the transition lock is held. A decision taken while another transition
++    /// was running (e.g. hotplugs caused by the live panel switch itself, seen while the old
++    /// mode was still current) would otherwise undo that transition right after it finished.
++    pub async fn internal_set_mode_if(
++        &self,
++        expected: Modes,
++        mode: Modes,
++        save: bool,
++    ) -> Result<()> {
++        let _transition = self.transition.lock().await;
++        let current = self.mode_state.read().await.mode();
++        if current != expected {
++            info!(
++                "skipping automatic switch to {mode}: mode changed from {expected} to {current} meanwhile"
++            );
++            return Ok(());
++        }
++        let result = self.set_mode_locked(mode, save).await;
++        self.emit_mux_changed().await;
++        result
++    }
++
++    /// Announce a newly applied blocking policy: per-GPU `Block` properties, the switcheroo API
++    /// and nvidia-powerd.
++    async fn notify_policy_applied(&self, mode: Modes) {
+         // Emit block_changed signal after the mode has been applied and send drm uevent
+         let gpu_list = self.gpu_list.read().await;
+ 
+@@ -100,7 +131,7 @@ impl ModeInterface {
+         self.switcheroo_int.emit_gpu_list_changed().await;
+ 
+         match mode {
+-            Modes::Hybrid | Modes::Manual => {
++            Modes::Hybrid | Modes::Manual | Modes::Ultimate => {
+                 let lock = self.nvidia_powerd_lock.clone();
+                 task::spawn(async move {
+                     let _guard = lock.lock().await;
+@@ -115,10 +146,375 @@ impl ModeInterface {
+                 });
+             }
+         }
++    }
++
++    /// [`Self::internal_set_mode`] body, the transition lock must be held
++    async fn set_mode_locked(&self, mode: Modes, save: bool) -> Result<()> {
++        let previous = self.mode_state.read().await.mode();
++
++        if mode == Modes::Ultimate {
++            self.enter_ultimate(previous).await?;
++        } else {
++            self.ensure_panel_on_igpu(previous, mode).await?;
++            self.apply_mode(mode).await?;
++        }
++
++        // A successful, persisted request supersedes an Ultimate mode waiting for ApplyPending
++        if save {
++            self.mux.set_pending(false);
++        }
++
++        // Save
++        {
++            let mut state = self.mode_state.write().await;
++            if let Err(e) = state.save_state(mode, save).await {
++                warn!("mode couldn't be saved to config: {e}");
++            }
++        }
++
++        self.emit_mode_changed().await;
++        self.notify_policy_applied(mode).await;
+ 
+         Ok(())
+     }
+ 
++    async fn emit_mode_changed(&self) {
++        if let Some(emitter) = self.signal_emitter.get()
++            && let Err(err) = self.mode_changed(emitter).await
++        {
++            warn!("failed to emit mode change signal: {err}");
++        };
++    }
++
++    async fn emit_mux_changed(&self) {
++        crate::interface::mux::emit_mux_changed(self).await;
++    }
++
++    /// Snapshot of the available GPUs for the mux topology resolution
++    async fn mux_gpus(&self) -> Vec<MuxGpu> {
++        let gpu_list = self.gpu_list.read().await;
++        gpu_list
++            .values()
++            .filter(|gpu| gpu.device.is_available())
++            .map(|gpu| MuxGpu {
++                pci: gpu.device.pci().pci_address().to_string(),
++                nvidia: gpu.device.gpu_vendor() == GpuVendor::Nvidia,
++            })
++            .collect()
++    }
++
++    /// Whether Ultimate can be offered on this system
++    pub async fn mux_capable(&self) -> bool {
++        let gpus = self.mux_gpus().await;
++        self.mux.probe(&gpus).await
++    }
++
++    /// Apply the Hybrid blocking policy and move the panel to the dGPU.
++    ///
++    /// On failure the panel is reverted to the iGPU by the mux controller, the previous blocking
++    /// policy is restored and the mode is left unchanged.
++    async fn enter_ultimate(&self, previous: Modes) -> Result<()> {
++        let gpus = self.mux_gpus().await;
++        if !self.mux.probe(&gpus).await {
++            let message = "Couldn't set mode to Ultimate: no live display mux available (needs the patched nvidia-modeset `mux` parameter and an eDP connector on both GPUs)".to_string();
++            error!("{message}");
++            return Err(fdo::Error::NotSupported(message).into());
++        }
++        let topo = self.mux.resolve(&gpus).map_err(mux_to_cardwire)?;
++        let panel = self.mux.panel_gpu().await;
++
++        // Only move the panel if a compositor can actually drive it on the dGPU. Checked before
++        // unblocking: a compositor that couldn't open the blocked dGPU never will.
++        if panel != PanelGpu::Dgpu && !crate::core::mux::compositor_holds_dgpu(&topo).await {
++            let message = format!(
++                "Couldn't set mode to Ultimate: the compositor doesn't have the dGPU ({}) open \
++                 because the session started while it was blocked; switch to Hybrid, log out \
++                 and back in, then select Ultimate",
++                topo.dgpu_card
++            );
++            error!("mux: {message}");
++            self.mux.set_last_error(message.clone());
++            return Err(fdo::Error::Failed(message).into());
++        }
++
++        // Nothing may be blocked while the dGPU drives the panel
++        self.apply_mode(Modes::Ultimate).await?;
++
++        if panel == PanelGpu::Dgpu && self.mux.dgpu_panel_connected(&topo).await {
++            info!("mux: panel already driven by the dGPU, adopting the current state");
++            self.mux.clear_degraded();
++            return Ok(());
++        }
++        if self.mux.is_wedged() {
++            let err = MuxError::Wedged;
++            self.mux.set_last_error(err.to_string());
++            self.restore_after_failed_enter(previous, false).await;
++            return Err(mux_to_cardwire(err));
++        }
++
++        self.mux.set_switching(true);
++        self.emit_mux_changed().await;
++        let result = self.mux.enter_dgpu(&topo).await;
++        self.mux.set_switching(false);
++
++        match result {
++            Ok(()) => {
++                self.mux.clear_degraded();
++                self.mux.set_last_error("");
++                Ok(())
++            }
++            Err(err) => {
++                let stranded = matches!(err, MuxError::RevertFailed { .. });
++                if stranded {
++                    self.mux.set_degraded(err.to_string());
++                } else {
++                    self.mux.set_last_error(err.to_string());
++                }
++                self.restore_after_failed_enter(previous, stranded).await;
++                Err(mux_to_cardwire(err))
++            }
++        }
++    }
++
++    /// Restore the blocking policy of `previous` after a failed switch to the dGPU. When the
++    /// panel may still be on the dGPU (`stranded`), stay Hybrid-equivalent instead.
++    async fn restore_after_failed_enter(&self, previous: Modes, stranded: bool) {
++        let restore = if stranded || previous == Modes::Ultimate {
++            Modes::Hybrid
++        } else {
++            previous
++        };
++        if let Err(err) = self.apply_mode(restore).await {
++            warn!("failed to restore {restore} after a failed switch to Ultimate: {err}");
++        }
++        self.notify_policy_applied(restore).await;
++        if restore != previous {
++            let mut state = self.mode_state.write().await;
++            let _ = state.save_state(restore, false).await;
++            drop(state);
++            self.emit_mode_changed().await;
++        }
++    }
++
++    /// Make sure the internal panel is driven by the iGPU before applying `target`.
++    ///
++    /// Errors only when the panel could not be moved back and `target` may block the dGPU.
++    async fn ensure_panel_on_igpu(&self, previous: Modes, target: Modes) -> Result<()> {
++        if !self.mux.param_present() {
++            return Ok(());
++        }
++        let panel = self.mux.panel_gpu().await;
++        let needs_leave = match panel {
++            PanelGpu::Dgpu => true,
++            // A previous leave failed: the readback can't be trusted before blocking the dGPU
++            PanelGpu::Igpu => self.mux.is_degraded() && target.may_block_dgpu(),
++            PanelGpu::Unknown => previous == Modes::Ultimate || target.may_block_dgpu(),
++        };
++        if !needs_leave {
++            return Ok(());
++        }
++
++        let gpus = self.mux_gpus().await;
++        let result = match self.mux.resolve(&gpus) {
++            Ok(topo) => {
++                self.mux.set_switching(true);
++                self.emit_mux_changed().await;
++                let result = self.mux.leave_to_igpu(&topo, true).await;
++                self.mux.set_switching(false);
++                result
++            }
++            // Not a mux system after all, nothing can be on the dGPU through us
++            Err(err) if panel != PanelGpu::Dgpu => {
++                info!("mux: skipping panel handover: {err}");
++                return Ok(());
++            }
++            Err(err) => Err(err),
++        };
++
++        match result {
++            Ok(()) => {
++                self.mux.clear_degraded();
++                self.mux.set_last_error("");
++                if target.may_block_dgpu() {
++                    info!(
++                        "mux: giving the compositor {}s to move rendering off the dGPU before blocking it",
++                        crate::core::mux::RENDER_SETTLE.as_secs()
++                    );
++                    tokio::time::sleep(crate::core::mux::RENDER_SETTLE).await;
++                }
++                Ok(())
++            }
++            Err(err) => {
++                let message =
++                    format!("the internal panel could not be moved back to the iGPU: {err}");
++                error!("mux: {message}");
++                self.mux.set_degraded(message.clone());
++                if target.may_block_dgpu() {
++                    // Keep the dGPU usable, it may still drive the panel
++                    if previous.may_block_dgpu() {
++                        if let Err(err) = self.apply_mode(Modes::Hybrid).await {
++                            warn!("failed to fall back to hybrid blocking: {err}");
++                        }
++                        self.notify_policy_applied(Modes::Hybrid).await;
++                        let mut state = self.mode_state.write().await;
++                        let _ = state.save_state(Modes::Hybrid, false).await;
++                        drop(state);
++                        self.emit_mode_changed().await;
++                    }
++                    Err(fdo::Error::Failed(format!(
++                        "Couldn't set mode to {target}: {message}; only Hybrid is allowed until this is resolved"
++                    ))
++                    .into())
++                } else {
++                    warn!("mux: continuing with {target}, the dGPU stays available");
++                    Ok(())
++                }
++            }
++        }
++    }
++
++    /// Startup path for a persisted Ultimate mode.
++    ///
++    /// The panel is never switched at early boot: if it is already on the dGPU the state is
++    /// adopted, otherwise the Hybrid policy is applied and Ultimate is marked pending until
++    /// `ApplyPending` is called (after login).
++    pub async fn startup_ultimate(&self) -> Result<()> {
++        let _transition = self.transition.lock().await;
++        let gpus = self.mux_gpus().await;
++        let adopt = if self.mux.probe(&gpus).await
++            && self.mux.panel_gpu().await == PanelGpu::Dgpu
++            && let Ok(topo) = self.mux.resolve(&gpus)
++        {
++            self.mux.dgpu_panel_connected(&topo).await
++        } else {
++            false
++        };
++
++        let result = if adopt {
++            info!("mux: persisted mode is Ultimate and the panel is on the dGPU, adopting");
++            self.set_mode_locked(Modes::Ultimate, false).await
++        } else {
++            info!("mux: persisted mode is Ultimate, applying Hybrid until ApplyPending is called");
++            let result = self.set_mode_locked(Modes::Hybrid, false).await;
++            if result.is_ok() {
++                self.mux.set_pending(true);
++            }
++            result
++        };
++        self.emit_mux_changed().await;
++        result
++    }
++
++    /// Apply a pending Ultimate mode (D-Bus `ApplyPending`), no-op when nothing is pending
++    pub async fn apply_pending(&self) -> Result<()> {
++        if !self.mux.is_pending() {
++            info!("mux: no pending mode to apply");
++            return Ok(());
++        }
++        info!("mux: applying pending Ultimate mode");
++        let result = self.internal_set_mode(Modes::Ultimate, true).await;
++        if result.is_err() {
++            // Keep it pending so it can be retried
++            self.mux.set_pending(true);
++            self.emit_mux_changed().await;
++        }
++        result
++    }
++
++    /// Mode to restore from the persisted state for automatic transitions (gpu refresh,
++    /// external display): a pending Ultimate stays Hybrid until `ApplyPending`.
++    pub fn effective_persisted_mode(&self, persisted: Modes) -> Modes {
++        if persisted == Modes::Ultimate && self.mux.is_pending() {
++            Modes::Hybrid
++        } else {
++            persisted
++        }
++    }
++
++    /// Re-read the mux state and reconcile it with the current mode (D-Bus `Reconcile`, resume).
++    pub async fn reconcile_mux(&self) -> Result<()> {
++        let _transition = self.transition.lock().await;
++        let result = self.reconcile_mux_locked().await;
++        self.emit_mux_changed().await;
++        result
++    }
++
++    async fn reconcile_mux_locked(&self) -> Result<()> {
++        if !self.mux.param_present() {
++            return Ok(());
++        }
++        let mode = self.mode_state.read().await.mode();
++        let panel = self.mux.panel_gpu().await;
++        let gpus = self.mux_gpus().await;
++        let topo = self.mux.resolve(&gpus).ok();
++        info!("mux: reconciling, mode {mode}, panel on {}", panel.as_str());
++
++        match (mode, panel) {
++            (Modes::Ultimate, PanelGpu::Dgpu) => {
++                let connected = match &topo {
++                    Some(topo) => self.mux.dgpu_panel_connected(topo).await,
++                    None => false,
++                };
++                if connected {
++                    self.mux.clear_degraded();
++                    Ok(())
++                } else {
++                    // Half-switched: bring the panel home and wait for ApplyPending
++                    warn!("mux: dGPU drives the mux but its eDP is not connected, leaving");
++                    let result = self.set_mode_locked(Modes::Hybrid, false).await;
++                    self.mux.set_pending(true);
++                    result
++                }
++            }
++            (Modes::Ultimate, _) => {
++                // The panel went back to the iGPU (e.g. firmware on resume): stay Hybrid and
++                // let ApplyPending switch it again
++                warn!("mux: mode is Ultimate but the panel is not on the dGPU, marking pending");
++                let result = self.set_mode_locked(Modes::Hybrid, false).await;
++                self.mux.set_pending(true);
++                result
++            }
++            (_, PanelGpu::Dgpu) => {
++                warn!("mux: panel is on the dGPU outside of Ultimate, moving it back");
++                self.set_mode_locked(mode, false).await
++            }
++            (_, _) => {
++                if panel == PanelGpu::Igpu {
++                    self.mux.clear_degraded();
++                }
++                Ok(())
++            }
++        }
++    }
++
++    /// Best effort: move the panel back to the iGPU before shutdown, without touching the
++    /// persisted mode (a persisted Ultimate becomes pending on next boot).
++    pub async fn leave_for_shutdown(&self) {
++        let _transition = self.transition.lock().await;
++        if !self.mux.param_present() {
++            return;
++        }
++        let mode = self.mode_state.read().await.mode();
++        let panel = self.mux.panel_gpu().await;
++        if panel == PanelGpu::Igpu && mode != Modes::Ultimate {
++            return;
++        }
++        let gpus = self.mux_gpus().await;
++        match self.mux.resolve(&gpus) {
++            Ok(topo) => {
++                info!("mux: shutdown, moving the panel back to the iGPU");
++                self.mux.set_switching(true);
++                self.emit_mux_changed().await;
++                if let Err(err) = self.mux.leave_to_igpu(&topo, false).await {
++                    error!("mux: failed to move the panel back to the iGPU before shutdown: {err}");
++                }
++                self.mux.set_switching(false);
++                self.emit_mux_changed().await;
++            }
++            Err(err) => warn!("mux: shutdown handover skipped: {err}"),
++        }
++    }
++
+     /// Apply a mode to GPU blocking and the eBPF map without persisting it
+     pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
+         let gpu_list = self.gpu_list.read().await;
+@@ -153,7 +549,8 @@ impl ModeInterface {
+             }
+ 
+             // Hybrid mode unblocks all GPUs so all are available to the system
+-            Modes::Hybrid => {
++            // Ultimate uses the same policy, the panel handover is done by internal_set_mode
++            Modes::Hybrid | Modes::Ultimate => {
+                 for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
+                     gpu.unblock_gpu().await?;
+                 }
+@@ -208,6 +605,7 @@ impl ModeInterface {
+     /// 1 -> Hybrid
+     /// 2 -> Manual
+     /// 3 -> Smart
++    /// 4 -> Ultimate
+     #[zbus(property)]
+     pub async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
+         let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
+@@ -223,6 +621,7 @@ impl ModeInterface {
+     /// 1 -> Hybrid
+     /// 2 -> Manual
+     /// 3 -> Smart
++    /// 4 -> Ultimate
+     #[zbus(property)]
+     pub async fn mode(&self) -> fdo::Result<u32> {
+         Ok(u32::from(self.mode_state.read().await.mode()))
+@@ -230,19 +629,32 @@ impl ModeInterface {
+ 
+     // zbus method
+     /// List of available modes depending of the system type
++    /// Ultimate is listed whenever a live display mux is available, whatever the system type
+     pub async fn available_modes(&self) -> fdo::Result<Vec<Modes>> {
+         let system_type = {
+             let gpu_list = self.gpu_list.read().await;
+ 
+             SystemType::from_gpulist(&gpu_list)
+         };
+-        Ok(match system_type {
++        let mut modes = match system_type {
+             SystemType::Laptop => {
+                 vec![Modes::Integrated, Modes::Hybrid, Modes::Smart]
+             }
+             SystemType::Desktop | SystemType::Manual => {
+                 vec![Modes::Hybrid, Modes::Manual]
+             }
+-        })
++        };
++        if self.mux_capable().await {
++            modes.push(Modes::Ultimate);
++        }
++        Ok(modes)
++    }
++}
++
++/// Map a mux error to a D-Bus friendly cardwire error
++fn mux_to_cardwire(err: MuxError) -> CardwireError {
++    match err {
++        MuxError::NotCapable(_) => fdo::Error::NotSupported(err.to_string()).into(),
++        _ => fdo::Error::Failed(err.to_string()).into(),
+     }
+ }
+diff --git a/crates/cardwire-daemon/src/interface/mux.rs b/crates/cardwire-daemon/src/interface/mux.rs
+new file mode 100644
+index 0000000..946d2e8
+--- /dev/null
++++ b/crates/cardwire-daemon/src/interface/mux.rs
+@@ -0,0 +1,78 @@
++//! Define the live display mux dbus (Ultimate mode)
++use crate::{core::errors::CardwireError, interface::ModeInterface};
++use log::warn;
++use zbus::{fdo, interface};
++
++#[derive(Clone)]
++pub struct MuxInterface {
++    mode: ModeInterface,
++}
++
++impl MuxInterface {
++    pub fn build(mode: ModeInterface) -> Self {
++        Self { mode }
++    }
++}
++
++fn into_fdo(err: CardwireError) -> fdo::Error {
++    match err {
++        CardwireError::FdoError(err) => err,
++        err => fdo::Error::Failed(err.to_string()),
++    }
++}
++
++/// Emit PropertiesChanged for every Mux property, no-op until the interface is served
++pub(crate) async fn emit_mux_changed(mode: &ModeInterface) {
++    let Some(emitter) = mode.mux.signal_emitter.get() else {
++        return;
++    };
++    let iface = MuxInterface { mode: mode.clone() };
++    let results = [
++        iface.state_changed(emitter).await,
++        iface.panel_gpu_changed(emitter).await,
++        iface.last_error_changed(emitter).await,
++        iface.capable_changed(emitter).await,
++    ];
++    for err in results.into_iter().filter_map(|res| res.err()) {
++        warn!("failed to emit Mux property change: {err}");
++    }
++}
++
++#[interface(name = "org.opengamingcollective.cardwire.Mux")]
++impl MuxInterface {
++    /// Whether a live display mux is available (Ultimate mode can be selected)
++    #[zbus(property)]
++    pub async fn capable(&self) -> fdo::Result<bool> {
++        Ok(self.mode.mux_capable().await)
++    }
++
++    /// GPU driving the internal panel: igpu, dgpu or unknown
++    #[zbus(property)]
++    pub async fn panel_gpu(&self) -> fdo::Result<String> {
++        Ok(self.mode.mux.panel_gpu().await.as_str().to_string())
++    }
++
++    /// idle, switching, pending (Ultimate waiting for ApplyPending) or degraded (the panel could
++    /// not be moved back to the iGPU, or the driver path is wedged)
++    #[zbus(property)]
++    pub async fn state(&self) -> fdo::Result<String> {
++        Ok(self.mode.mux.state().as_str().to_string())
++    }
++
++    /// Last mux error, empty when the last switch succeeded
++    #[zbus(property)]
++    pub async fn last_error(&self) -> fdo::Result<String> {
++        Ok(self.mode.mux.last_error())
++    }
++
++    /// Apply a persisted Ultimate mode that was deferred at boot or after resume.
++    /// Meant to be called once the graphical session is up. No-op when nothing is pending.
++    pub async fn apply_pending(&self) -> fdo::Result<()> {
++        self.mode.apply_pending().await.map_err(into_fdo)
++    }
++
++    /// Re-read the mux state and reconcile it with the current mode (used after resume)
++    pub async fn reconcile(&self) -> fdo::Result<()> {
++        self.mode.reconcile_mux().await.map_err(into_fdo)
++    }
++}
+diff --git a/crates/cardwire-daemon/src/manager.rs b/crates/cardwire-daemon/src/manager.rs
+index bd45fc3..e6d7c58 100644
+--- a/crates/cardwire-daemon/src/manager.rs
++++ b/crates/cardwire-daemon/src/manager.rs
+@@ -4,7 +4,7 @@ use crate::{
+     Result, analyzer::CardwireAnalyzer, core::{
+         env::compute_switcheroo_env, gpu::GpuEnumerator, pci::{self}
+     }, file::{CardwireConfig, CardwireDatabase, CardwireGpuState, CardwireModeState}, interface::{
+-        ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, SmartPolicyInterface, SwitcherooInterface
++        ConfigInterface, ConfigMemory, DaemonContext, DebugInterface, GpuInterface, LoggerInterface, ModeInterface, Modes, MuxInterface, SmartPolicyInterface, SwitcherooInterface
+     }, tasks
+ };
+ use cardwire_ebpf_userspace::{EbpfBlocker, EbpfSettings};
+@@ -16,6 +16,7 @@ use zbus::{fdo, interface};
+ #[derive(Clone)]
+ pub struct DaemonManager {
+     pub mode_interface: ModeInterface,
++    pub mux_interface: MuxInterface,
+     pub config_interface: ConfigInterface,
+     pub debug_interface: DebugInterface,
+     pub switcheroo_interface: SwitcherooInterface,
+@@ -94,6 +95,7 @@ impl DaemonManager {
+ 
+         Ok(Self {
+             mode_interface: mode_interface.clone(),
++            mux_interface: MuxInterface::build(mode_interface.clone()),
+             config_interface: ConfigInterface::build(&context)?,
+             debug_interface: DebugInterface::build(
+                 &context,
+@@ -194,6 +196,10 @@ impl DaemonManager {
+             }
+         };
+         let mode = Modes::try_from(mode_to_apply)?;
++        // A persisted Ultimate never switches the panel at early boot, see startup_ultimate
++        if mode_arg.is_none() && mode == Modes::Ultimate {
++            return self.mode_interface.startup_ultimate().await;
++        }
+         // On first attempt: don't save (already persisted)
+         // On fallback: persist so the broken mode isn't retried on every boot
+         let save = mode_arg.is_some();
+@@ -212,6 +218,16 @@ impl DaemonManager {
+             res
+         }
+     }
++    pub fn logind_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
++        let mode_interface = self.mode_interface.clone();
++        async move {
++            let res = tasks::watch_logind(mode_interface).await;
++            if let Err(ref e) = res {
++                error!("logind task failed: {}", e);
++            }
++            res
++        }
++    }
+     pub fn monitor_udev_future(&self) -> impl Future<Output = Result<(), zbus::Error>> + 'static {
+         let debug_int = self.debug_interface.clone();
+         async move {
+diff --git a/crates/cardwire-daemon/src/tasks/logind.rs b/crates/cardwire-daemon/src/tasks/logind.rs
+new file mode 100644
+index 0000000..c182dbd
+--- /dev/null
++++ b/crates/cardwire-daemon/src/tasks/logind.rs
+@@ -0,0 +1,90 @@
++//! Listen to logind to hand the internal panel back to the iGPU before shutdown and to
++//! reconcile the live display mux after resume
++
++use std::time::Duration;
++
++use log::{info, warn};
++use tokio_stream::StreamExt;
++use zbus::{Connection, Result, proxy, zvariant::OwnedFd};
++
++use crate::interface::ModeInterface;
++
++/// Let the hardware and the compositor settle after resume before re-reading the mux
++const RESUME_SETTLE: Duration = Duration::from_secs(2);
++
++#[proxy(
++    interface = "org.freedesktop.login1.Manager",
++    default_service = "org.freedesktop.login1",
++    default_path = "/org/freedesktop/login1"
++)]
++trait Login1Manager {
++    fn inhibit(&self, what: &str, who: &str, why: &str, mode: &str) -> Result<OwnedFd>;
++
++    #[zbus(signal)]
++    fn prepare_for_shutdown(&self, start: bool) -> Result<()>;
++
++    #[zbus(signal)]
++    fn prepare_for_sleep(&self, start: bool) -> Result<()>;
++}
++
++/// Take a shutdown delay inhibitor so logind waits for the panel handover
++async fn shutdown_inhibitor(proxy: &Login1ManagerProxy<'_>) -> Option<OwnedFd> {
++    match proxy
++        .inhibit(
++            "shutdown",
++            "cardwire",
++            "Move the internal panel back to the iGPU",
++            "delay",
++        )
++        .await
++    {
++        Ok(fd) => Some(fd),
++        Err(err) => {
++            warn!("failed to take a logind shutdown inhibitor: {err}");
++            None
++        }
++    }
++}
++
++pub async fn watch_logind(mode_interface: ModeInterface) -> zbus::Result<()> {
++    let connection = Connection::system().await?;
++    let proxy = Login1ManagerProxy::new(&connection).await?;
++    let mut shutdown_stream = proxy.receive_prepare_for_shutdown().await?;
++    let mut sleep_stream = proxy.receive_prepare_for_sleep().await?;
++    let mut inhibitor = shutdown_inhibitor(&proxy).await;
++
++    loop {
++        tokio::select! {
++            Some(signal) = shutdown_stream.next() => {
++                let Ok(args) = signal.args() else { continue };
++                if args.start {
++                    info!("shutdown requested, moving the internal panel back to the iGPU");
++                    mode_interface.leave_for_shutdown().await;
++                    // Release the delay lock so the shutdown proceeds
++                    drop(inhibitor.take());
++                } else {
++                    // Shutdown was cancelled: the panel may already be back on the iGPU while the
++                    // mode still says Ultimate, reconcile (marks Ultimate pending)
++                    if let Err(err) = mode_interface.reconcile_mux().await {
++                        warn!("failed to reconcile the mux after a cancelled shutdown: {err}");
++                    }
++                    if inhibitor.is_none() {
++                        inhibitor = shutdown_inhibitor(&proxy).await;
++                    }
++                }
++            }
++            Some(signal) = sleep_stream.next() => {
++                let Ok(args) = signal.args() else { continue };
++                if !args.start {
++                    info!("resumed from sleep, reconciling the live display mux");
++                    tokio::time::sleep(RESUME_SETTLE).await;
++                    if let Err(err) = mode_interface.reconcile_mux().await {
++                        warn!("failed to reconcile the mux after resume: {err}");
++                    }
++                }
++            }
++            else => break,
++        }
++    }
++    Ok(())
++}
+diff --git a/crates/cardwire-daemon/src/tasks/mod.rs b/crates/cardwire-daemon/src/tasks/mod.rs
+index 802d26f..a709c50 100644
+--- a/crates/cardwire-daemon/src/tasks/mod.rs
++++ b/crates/cardwire-daemon/src/tasks/mod.rs
+@@ -1,9 +1,11 @@
+ mod battery_switch;
++mod logind;
+ mod monitor_display;
+ mod monitor_udev;
+ mod watch_power_state;
+ 
+ pub use battery_switch::watch_battery_status;
++pub use logind::watch_logind;
+ pub use monitor_display::monitor_display_changes;
+ pub use monitor_udev::monitor_pci_changes;
+ pub use watch_power_state::watch_power_state;
+diff --git a/crates/cardwire-daemon/src/tasks/monitor_display.rs b/crates/cardwire-daemon/src/tasks/monitor_display.rs
+index 15d5c5d..ce90e75 100644
+--- a/crates/cardwire-daemon/src/tasks/monitor_display.rs
++++ b/crates/cardwire-daemon/src/tasks/monitor_display.rs
+@@ -55,6 +55,11 @@ async fn reconcile_gpu(
+     mode: &ModeInterface,
+     gpu_list: &Arc<RwLock<BTreeMap<usize, Arc<GpuInterface>>>>,
+ ) {
++    // A running transition (e.g. a live panel switch) causes the very hotplugs we'd react to;
++    // its outcome is reconciled on the next event or periodic pass.
++    if mode.transition_in_progress() {
++        return;
++    }
+     let Some(active) = is_gpu_active(card).await else {
+         warn!("failed to probe display state for card{card}; skipping reconcile");
+         return;
+@@ -85,12 +90,17 @@ async fn reconcile_gpu(
+ 
+             if active && blocked {
+                 // The dGPU must drive the display: unblock it by switching to Hybrid.
+-                let _ = mode.internal_set_mode(Modes::Hybrid, false).await;
++                let _ = mode
++                    .internal_set_mode_if(current_mode, Modes::Hybrid, false)
++                    .await;
+             } else if !active && !blocked {
+                 // The override is in effect and the display is gone: restore the persisted mode
+                 // from disk, since mode() now reports the applied override.
+                 if let Ok(persisted) = CardwireModeState::build() {
+-                    let _ = mode.internal_set_mode(persisted.mode(), false).await;
++                    let persisted = mode.effective_persisted_mode(persisted.mode());
++                    let _ = mode
++                        .internal_set_mode_if(current_mode, persisted, false)
++                        .await;
+                 }
+             }
+         }
+@@ -109,8 +119,8 @@ async fn reconcile_gpu(
+                 let _ = gpu.unblock_gpu().await;
+             }
+         }
+-        // Hybrid mode keeps every GPU unblocked, nothing to reconcile.
+-        Modes::Hybrid => {}
++        // Hybrid and Ultimate keep every GPU unblocked, nothing to reconcile.
++        Modes::Hybrid | Modes::Ultimate => {}
+     }
+ }
+ 
+diff --git a/crates/cardwire-daemon/src/types.rs b/crates/cardwire-daemon/src/types.rs
+index ea5c84e..75406cd 100644
+--- a/crates/cardwire-daemon/src/types.rs
++++ b/crates/cardwire-daemon/src/types.rs
+@@ -13,6 +13,30 @@ pub enum Modes {
+     Hybrid,
+     Manual,
+     Smart,
++    /// Hybrid blocking policy, plus the internal panel driven by the dGPU through a live display
++    /// mux. Never written into the eBPF map as-is, see [`Modes::ebpf_value`].
++    Ultimate,
++}
++
++impl Modes {
++    /// Value written into the `cardwire_mode` eBPF map.
++    ///
++    /// The eBPF program only knows Integrated/Hybrid/Manual/Smart: Ultimate blocks nothing, so it
++    /// is mapped onto Hybrid's value and the eBPF program stays unchanged.
++    pub fn ebpf_value(self) -> u32 {
++        match self {
++            Modes::Ultimate => u32::from(Modes::Hybrid),
++            other => u32::from(other),
++        }
++    }
++
++    /// Whether the mode can block (and thus power off) the dGPU.
++    ///
++    /// Only Hybrid and Ultimate are guaranteed to never block a GPU; they are the only modes
++    /// allowed while the internal panel may still be driven by the dGPU.
++    pub fn may_block_dgpu(self) -> bool {
++        !matches!(self, Modes::Hybrid | Modes::Ultimate)
++    }
+ }
+ 
+ impl fmt::Display for Modes {
+@@ -22,6 +46,7 @@ impl fmt::Display for Modes {
+             Modes::Hybrid => write!(f, "Hybrid"),
+             Modes::Manual => write!(f, "Manual"),
+             Modes::Smart => write!(f, "Smart"),
++            Modes::Ultimate => write!(f, "Ultimate"),
+         }
+     }
+ }
+@@ -37,6 +62,7 @@ impl TryFrom<u32> for Modes {
+             1 => Ok(Self::Hybrid),
+             2 => Ok(Self::Manual),
+             3 => Ok(Self::Smart),
++            4 => Ok(Self::Ultimate),
+             _ => Err(CardwireError::UnknownMode(value)),
+         }
+     }
+@@ -52,6 +78,7 @@ impl From<Modes> for u32 {
+             Modes::Hybrid => 1,
+             Modes::Manual => 2,
+             Modes::Smart => 3,
++            Modes::Ultimate => 4,
+         }
+     }
+ }
+@@ -107,11 +134,35 @@ mod tests {
+         assert_eq!(Modes::try_from(1).unwrap(), Modes::Hybrid);
+         assert_eq!(Modes::try_from(2).unwrap(), Modes::Manual);
+         assert_eq!(Modes::try_from(3).unwrap(), Modes::Smart);
++        assert_eq!(Modes::try_from(4).unwrap(), Modes::Ultimate);
++        assert!(Modes::try_from(5).is_err());
++    }
++
++    #[test]
++    fn test_modes_ebpf_value_maps_ultimate_to_hybrid() {
++        assert_eq!(Modes::Ultimate.ebpf_value(), u32::from(Modes::Hybrid));
++        for mode in [
++            Modes::Integrated,
++            Modes::Hybrid,
++            Modes::Manual,
++            Modes::Smart,
++        ] {
++            assert_eq!(mode.ebpf_value(), u32::from(mode));
++        }
++    }
++
++    #[test]
++    fn test_modes_may_block_dgpu() {
++        assert!(!Modes::Hybrid.may_block_dgpu());
++        assert!(!Modes::Ultimate.may_block_dgpu());
++        assert!(Modes::Integrated.may_block_dgpu());
++        assert!(Modes::Smart.may_block_dgpu());
++        assert!(Modes::Manual.may_block_dgpu());
+     }
+ 
+     #[test]
+     fn test_modes_into_u32_roundtrip() {
+-        for i in 0..=3u32 {
++        for i in 0..=4u32 {
+             let mode = Modes::try_from(i).unwrap();
+             let back: u32 = mode.into();
+             assert_eq!(back, i);
+@@ -124,6 +175,7 @@ mod tests {
+         assert_eq!(Modes::Hybrid.to_string(), "Hybrid");
+         assert_eq!(Modes::Manual.to_string(), "Manual");
+         assert_eq!(Modes::Smart.to_string(), "Smart");
++        assert_eq!(Modes::Ultimate.to_string(), "Ultimate");
+     }
+ 
+     #[test]
+@@ -138,6 +190,7 @@ mod tests {
+             Modes::Hybrid,
+             Modes::Manual,
+             Modes::Smart,
++            Modes::Ultimate,
+         ];
+         for mode in modes {
+             let json = serde_json::to_string(&mode).unwrap();
+@@ -152,5 +205,7 @@ mod tests {
+         assert_eq!(json, "\"integrated\"");
+         let json = serde_json::to_string(&Modes::Hybrid).unwrap();
+         assert_eq!(json, "\"hybrid\"");
++        let json = serde_json::to_string(&Modes::Ultimate).unwrap();
++        assert_eq!(json, "\"ultimate\"");
+     }
+ }
+diff --git a/crates/cardwire-gui/src/helpers/dbus.rs b/crates/cardwire-gui/src/helpers/dbus.rs
+index b9314fc..62c6d42 100644
+--- a/crates/cardwire-gui/src/helpers/dbus.rs
++++ b/crates/cardwire-gui/src/helpers/dbus.rs
+@@ -137,7 +137,11 @@ impl CardwireDbus {
+         proxy.call("AvailableModes", &()).await
+     }
+     pub async fn set_mode(&self, mode: u32) -> zbus::fdo::Result<()> {
+-        let connection = Connection::system().await?;
++        // A switch to/from Ultimate can take longer than the default 25 s method timeout
++        let connection = zbus::connection::Builder::system()?
++            .method_timeout(std::time::Duration::from_secs(90))
++            .build()
++            .await?;
+         let proxy = zbus::Proxy::new(
+             &connection,
+             "org.opengamingcollective.cardwire",
+diff --git a/crates/cardwire-gui/src/models.rs b/crates/cardwire-gui/src/models.rs
+index 7a958ba..2738822 100644
+--- a/crates/cardwire-gui/src/models.rs
++++ b/crates/cardwire-gui/src/models.rs
+@@ -24,6 +24,7 @@ pub enum Mode {
+     #[default]
+     Manual = 2,
+     Smart = 3,
++    Ultimate = 4,
+ }
+ 
+ impl fmt::Display for Mode {
+@@ -33,6 +34,7 @@ impl fmt::Display for Mode {
+             Mode::Hybrid => "Hybrid",
+             Mode::Manual => "Manual",
+             Mode::Smart => "Smart",
++            Mode::Ultimate => "Ultimate",
+         };
+         write!(f, "{}", s)
+     }
+diff --git a/docs/getting-started/usage.md b/docs/getting-started/usage.md
+index 0dbddf9..afb03f2 100644
+--- a/docs/getting-started/usage.md
++++ b/docs/getting-started/usage.md
+@@ -64,6 +64,50 @@ To have cardwire allow access to all GPUs, use
+ cardwire set hybrid
+ ```
+ 
++### Ultimate (live display mux)
++
++On laptops whose internal panel can be muxed between the iGPU and the dGPU at runtime, Ultimate
++mode keeps the Hybrid policy (nothing blocked) and moves the internal panel to the dGPU without a
++reboot or logout. It requires a patched `nvidia-modeset` exposing
++`/sys/module/nvidia_modeset/parameters/mux` (and `mux_igpu_brightness`), and an eDP connector on
++both GPUs. `cardwire get` only lists `ultimate` when this is available.
++
++```bash
++cardwire set ultimate
++```
++
++The switch powers the dGPU up, flips the mux, forces connector detection and sends a synthetic
++hotplug uevent (`MUXHOTPLUG=1`, which a udev rule must turn into `HOTPLUG=1`) so the compositor
++lights the panel on the dGPU. If any step fails, or the panel is not lit within 20 seconds, the
++panel is moved back to the iGPU and the previous mode is kept.
++
++The compositor must have the dGPU open: a compositor that started while the dGPU was blocked
++(Integrated/Smart at login) can't use it later, so Ultimate is refused in that session. Start the
++session in Hybrid (or start cardwired only after login) to use Ultimate.
++
++Leaving Ultimate always moves the panel back to the iGPU first. If that fails (for instance when
++the driver hangs, in which case cardwire falls back to `/proc/acpi/call` when available), only
++Hybrid can be selected until the panel is back on the iGPU, so the dGPU is never blocked while it
++drives the panel.
++
++The panel is never switched at early boot: when Ultimate is the saved mode, cardwire starts in
++Hybrid and marks Ultimate as *pending*. Apply it once the graphical session is up (for instance
++from a login autostart entry):
++
++```bash
++cardwire mux apply
++```
++
++Other mux commands:
++
++```bash
++cardwire mux status     # capability, GPU driving the panel, state (idle|switching|pending|degraded), last error
++cardwire mux reconcile  # re-read the mux and reconcile it with the current mode (done automatically after resume)
++```
++
++Before shutdown the panel is moved back to the iGPU (logind delay inhibitor). After resume the mux
++state is reconciled: if the panel came back on the iGPU, Ultimate becomes pending again.
++
+ ### Smart Mode
+ 
+ Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real-time analyzer to scan each application at launch and selectively allow GPU access for approved apps.
+@@ -187,7 +231,7 @@ To enable/disable it:
+ cardwire config battery-auto-switch true
+ ```
+ 
+-The mode cardwire switches to on AC power is controlled by `battery_auto_switch_mode`. This can be set to `integrated`, `hybrid`, `manual`, or `smart`.
++The mode cardwire switches to on AC power is controlled by `battery_auto_switch_mode`. This can be set to `integrated`, `hybrid`, `manual`, `smart` or `ultimate`.
+ 
+ To get the current battery auto switch mode:
+ 
+diff --git a/org.opengamingcollective.cardwire.xml b/org.opengamingcollective.cardwire.xml
+index 5d28ab4..3070bd2 100644
+--- a/org.opengamingcollective.cardwire.xml
++++ b/org.opengamingcollective.cardwire.xml
+@@ -94,6 +94,7 @@
+   <interface name="org.opengamingcollective.cardwire.Mode">
+     <!--
+      List of available modes depending of the system type
++     Ultimate is listed whenever a live display mux is available, whatever the system type
+      -->
+     <method name="AvailableModes">
+       <arg type="au" direction="out"/>
+@@ -104,6 +105,7 @@
+      1 -> Hybrid
+      2 -> Manual
+      3 -> Smart
++     4 -> Ultimate
+      -->
+     <!--
+      Return the mode currently applied
+@@ -111,9 +113,40 @@
+      1 -> Hybrid
+      2 -> Manual
+      3 -> Smart
++     4 -> Ultimate
+      -->
+     <property name="Mode" type="u" access="readwrite"/>
+   </interface>
++  <interface name="org.opengamingcollective.cardwire.Mux">
++    <!--
++     Apply a persisted Ultimate mode that was deferred at boot or after resume.
++     Meant to be called once the graphical session is up. No-op when nothing is pending.
++     -->
++    <method name="ApplyPending">
++    </method>
++    <!--
++     Re-read the mux state and reconcile it with the current mode (used after resume)
++     -->
++    <method name="Reconcile">
++    </method>
++    <!--
++     Whether a live display mux is available (Ultimate mode can be selected)
++     -->
++    <property name="Capable" type="b" access="read"/>
++    <!--
++     Last mux error, empty when the last switch succeeded
++     -->
++    <property name="LastError" type="s" access="read"/>
++    <!--
++     GPU driving the internal panel: igpu, dgpu or unknown
++     -->
++    <property name="PanelGpu" type="s" access="read"/>
++    <!--
++     idle, switching, pending (Ultimate waiting for ApplyPending) or degraded (the panel could
++     not be moved back to the iGPU, or the driver path is wedged)
++     -->
++    <property name="State" type="s" access="read"/>
++  </interface>
+   <interface name="org.opengamingcollective.cardwire.SmartPolicy">
+     <!--
+      Authorized a pid to access a specific GPU

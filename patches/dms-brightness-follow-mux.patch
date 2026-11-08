@@ -1,0 +1,85 @@
+--- a/Services/BrightnessService.qml
++++ b/Services/BrightnessService.qml
+@@ -33,6 +33,9 @@
+         return getDeviceBrightness(deviceToUse);
+     }
+     property bool brightnessInitialized: false
++    // Backlights whose DRM connector is currently disabled, e.g. amdgpu_bl1 while a
++    // display mux routes the panel to the dGPU (whose own backlight then appears).
++    property var inactiveBacklights: ({})
+     property bool suppressOsd: true
+ 
+     signal brightnessChanged(bool showOsd)
+@@ -175,6 +178,7 @@
+             };
+         });
+         deviceMaxCache = newMaxCache;
++        probeBacklights();
+ 
+         const newBrightness = {};
+         let anyDeviceBrightnessChanged = false;
+@@ -364,7 +368,63 @@
+     function internalPanelDevice() {
+         if (!internalPanelActive())
+             return null;
+-        return devices.find(d => d.class === "backlight") || devices.find(d => d.class === "software" && isInternalPanelName(d.id.split(":").pop())) || null;
++        return devices.find(d => d.class === "backlight" && !isBacklightInactive(d.id)) || devices.find(d => d.class === "backlight") || devices.find(d => d.class === "software" && isInternalPanelName(d.id.split(":").pop())) || null;
++    }
++
++    function isBacklightInactive(deviceId) {
++        return inactiveBacklights[deviceId.split(":").pop()] === true;
++    }
++
++    // Re-read which backlights belong to a disabled connector (async, see backlightProbe).
++    function probeBacklights() {
++        if (!backlightProbe.running)
++            backlightProbe.running = true;
++    }
++
++    // Move the current/last device off a backlight that went dark (panel moved to the other
++    // GPU) and ask the backend to pick up added/removed backlight devices.
++    function applyInactiveBacklights(names) {
++        const next = {};
++        for (const n of names)
++            next[n] = true;
++        const changed = JSON.stringify(Object.keys(next).sort()) !== JSON.stringify(Object.keys(inactiveBacklights).sort());
++        inactiveBacklights = next;
++        if (!changed)
++            return;
++        log.info("Inactive backlights:", Object.keys(next).join(", ") || "none");
++        const panel = internalPanelDevice();
++        if (panel) {
++            if (currentDevice && isBacklightInactive(currentDevice))
++                setCurrentDevice(panel.id, false);
++            if (lastIpcDevice && isBacklightInactive(lastIpcDevice))
++                lastIpcDevice = panel.id;
++        }
++        rescanDevices();
++        brightnessVersion++;
++    }
++
++    Process {
++        id: backlightProbe
++        command: ["sh", "-c", "for b in /sys/class/backlight/*; do [ \"$(cat \"$b/device/enabled\" 2>/dev/null)\" = disabled ] && echo \"${b##*/}\"; done; true"]
++        stdout: StdioCollector {
++            onStreamFinished: root.applyInactiveBacklights(text.split("\n").filter(l => l.length > 0))
++        }
++    }
++
++    // A panel moving between GPUs shows up as screens changing (eDP-1 <-> eDP-2); the
++    // other GPU's backlight registers around the same time, so probe again shortly after.
++    Connections {
++        target: Quickshell
++        function onScreensChanged() {
++            root.probeBacklights();
++            backlightReprobe.restart();
++        }
++    }
++
++    Timer {
++        id: backlightReprobe
++        interval: 1500
++        onTriggered: root.probeBacklights()
+     }
+ 
+     function getDefaultDevice() {

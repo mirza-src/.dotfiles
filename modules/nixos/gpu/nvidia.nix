@@ -27,7 +27,7 @@ in
       enable = true;
       settings = {
         battery_auto_switch = true;
-        battery_auto_switch_mode = "hybrid";
+        battery_auto_switch_mode = "ultimate";
         experimental_nvidia_block = true;
         external_display_auto_switch = true;
       };
@@ -86,7 +86,8 @@ in
               (old.patches or [ ])
               # The probe runs in an "nv-probe-*" kthread that can't see /sys,
               # which silently disables runtime D3 (the dGPU never powers off).
-              ++ [ ../../../patches/nvidia-open-rtd3-probe-sysfs.patch ];
+              ++ [ ../../../patches/nvidia-open-rtd3-probe-sysfs.patch ]
+              ++ optional config.modules.gpu.dynamic-mux.enable ../../../patches/nvidia-open-dynamic-mux.patch;
           });
         };
 
