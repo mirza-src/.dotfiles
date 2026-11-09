@@ -19,10 +19,6 @@ rec {
       url = "github:nix-community/lanzaboote/v0.4.2";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    asus-dialpad-driver = {
-      url = "github:asus-linux-drivers/asus-dialpad-driver";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     mangowm = {
       url = "github:mangowm/mango";
       inputs.nixpkgs.follows = "nixpkgs";

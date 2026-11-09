@@ -1,25 +1,5 @@
 {
   "nodes": {
-    "asus-dialpad-driver": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1792529144,
-        "narHash": "sha256-3O7APZf7Q0tgOPvgcxRdGQCCnYxZvhO53EgIV79YFDM=",
-        "owner": "asus-linux-drivers",
-        "repo": "asus-dialpad-driver",
-        "rev": "f3cc7a08b821d4a6006ecbfeca5138407300a4db",
-        "type": "github"
-      },
-      "original": {
-        "owner": "asus-linux-drivers",
-        "repo": "asus-dialpad-driver",
-        "type": "github"
-      }
-    },
     "cachyos-kernel": {
       "inputs": {
         "flake-compat": "flake-compat",
@@ -912,7 +892,6 @@
     },
     "root": {
       "inputs": {
-        "asus-dialpad-driver": "asus-dialpad-driver",
         "cachyos-kernel": "cachyos-kernel",
         "dank-greeter": "dank-greeter",
         "dank-material-shell": "dank-material-shell",

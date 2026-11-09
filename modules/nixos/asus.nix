@@ -10,10 +10,6 @@ let
   cfg = config.modules.asus;
 in
 {
-  imports = [
-    inputs.asus-dialpad-driver.nixosModules.default
-  ];
-
   options.modules.asus = {
     enable = mkEnableOption "Enable ASUS Configuration Options";
   };
@@ -39,7 +35,6 @@ in
         linux-firmware
       ];
       services.asusd.enable = true;
-      hardware.asus-dialpad-driver.enable = false;
     })
   ];
 }
