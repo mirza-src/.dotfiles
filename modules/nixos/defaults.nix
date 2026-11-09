@@ -29,8 +29,10 @@ in
 
     services.logind.settings.Login = {
       HandlePowerKey = "hibernate";
-      HandleSuspendKey = "sleep";
-      HandleLidSwitch = "ignore";
+      HandleSuspendKey = "suspend";
+      HandleLidSwitch = "suspend";
+      HandleLidSwitchDocked = "ignore";
+      HandleLidSwitchExternalPower = "ignore";
     };
     services.fprintd.enable = true;
     services.hardware.bolt.enable = true;
