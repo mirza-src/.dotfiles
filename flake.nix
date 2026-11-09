@@ -2,7 +2,7 @@ rec {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel";
+    cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
       inputs.nixpkgs.follows = "nixpkgs";

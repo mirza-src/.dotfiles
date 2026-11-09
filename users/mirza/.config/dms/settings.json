@@ -2,7 +2,7 @@
   "dmsWindowsFloatingSeeded": [
     "mango"
   ],
-  "configVersion": 42,
+  "configVersion": 43,
   "batteryChargeLimit": 80,
   "batteryLowThreshold": 30,
   "batteryNotifyLow": true,
@@ -185,5 +185,25 @@
       "small": true
     }
   ],
-  "displayShowDisconnected": true
+  "displayShowDisconnected": true,
+  "cursorSettings": {
+    "theme": "Adwaita",
+    "size": 24,
+    "niri": {
+      "hideWhenTyping": false,
+      "hideAfterInactiveMs": 0
+    },
+    "hyprland": {
+      "hideOnKeyPress": false,
+      "hideOnTouch": false,
+      "inactiveTimeout": 0,
+      "warpOnMonitorChange": -1
+    },
+    "dwl": {
+      "cursorHideTimeout": 0
+    },
+    "mango": {
+      "cursorHideTimeout": 0
+    }
+  }
 }

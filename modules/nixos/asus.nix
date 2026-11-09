@@ -21,7 +21,8 @@ in
   config = lib.mkMerge [
     (mkIf cfg.enable {
       nixpkgs.overlays = [
-        inputs.cachyos-kernel.overlays.default
+        # pinned = built against the flake's own nixpkgs, so it hits cache.lantian.pub
+        inputs.cachyos-kernel.overlays.pinned
       ];
 
       boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4;
