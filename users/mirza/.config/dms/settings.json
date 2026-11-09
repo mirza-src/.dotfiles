@@ -1,5 +1,7 @@
 {
-  "dmsWindowsFloatingSeeded": ["mango"],
+  "dmsWindowsFloatingSeeded": [
+    "mango"
+  ],
   "configVersion": 42,
   "batteryChargeLimit": 80,
   "batteryLowThreshold": 30,
@@ -22,7 +24,6 @@
   "barConfigs": [
     {
       "id": "default",
-      "enabled": true,
       "leftWidgets": [
         "launcherButton",
         {
@@ -183,5 +184,6 @@
       "h": 1,
       "small": true
     }
-  ]
+  ],
+  "displayShowDisconnected": true
 }
