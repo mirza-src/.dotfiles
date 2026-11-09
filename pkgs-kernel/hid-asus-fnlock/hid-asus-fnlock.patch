@@ -1,0 +1,147 @@
+From: Mirza Esaaf Shuja <mirza@giantswarm.io>
+Subject: [PATCH] HID: asus: make Fn-lock default work and expose it in sysfs
+
+On keyboards with QUIRK_HID_FN_LOCK (ROG N-Key 0x19b6) the driver queued
+the initial Fn-lock report from asus_input_configured(), i.e. from inside
+hid_hw_start() and before the asus_kbd_init() handshake, which resets the
+keyboard's Fn-lock state. The keyboard therefore always booted with
+Fn-lock off, whatever the driver believed, and the state was never
+restored after resume.
+
+- apply Fn-lock after the init handshake / LED setup in probe
+- restore it on resume and reset_resume
+- add a fnlock_default module parameter (default Y, the previous intent)
+- add a fn_lock sysfs attribute on the HID device so userspace (asusctl)
+  can read and set the state; Fn+Esc still toggles it
+
+Signed-off-by: Mirza Esaaf Shuja <mirza@giantswarm.io>
+---
+diff --git a/drivers/hid/hid-asus.c b/drivers/hid/hid-asus.c
+index c38a2b3..a32e737 100644
+--- a/drivers/hid/hid-asus.c
++++ b/drivers/hid/hid-asus.c
+@@ -39,6 +39,11 @@ MODULE_AUTHOR("Victor Vlasenko <victor.vlasenko@sysgears.com>");
+ MODULE_AUTHOR("Frederik Wenigwieser <frederik.wenigwieser@gmail.com>");
+ MODULE_DESCRIPTION("Asus HID Keyboard and TouchPad");
+ 
++static bool fnlock_default = true;
++module_param(fnlock_default, bool, 0444);
++MODULE_PARM_DESC(fnlock_default,
++		 "Initial Fn-lock state on keyboards with HID Fn-lock: Y = F1-F12 without Fn (default), N = hotkeys without Fn");
++
+ #define T100_TPAD_INTF 2
+ #define MEDION_E1239T_TPAD_INTF 1
+ 
+@@ -422,6 +427,33 @@ static int asus_kbd_fn_lock_set(struct asus_drvdata *drvdata, bool enabled)
+ 	return 0;
+ }
+ 
++static ssize_t fn_lock_show(struct device *dev, struct device_attribute *attr,
++			    char *buf)
++{
++	struct asus_drvdata *drvdata = hid_get_drvdata(to_hid_device(dev));
++
++	return sysfs_emit(buf, "%d\n", READ_ONCE(drvdata->fn_lock));
++}
++
++static ssize_t fn_lock_store(struct device *dev, struct device_attribute *attr,
++			     const char *buf, size_t count)
++{
++	struct asus_drvdata *drvdata = hid_get_drvdata(to_hid_device(dev));
++	bool enabled;
++	int ret;
++
++	ret = kstrtobool(buf, &enabled);
++	if (ret)
++		return ret;
++
++	ret = asus_kbd_fn_lock_set(drvdata, enabled);
++	if (ret)
++		return ret;
++
++	return count;
++}
++static DEVICE_ATTR_RW(fn_lock);
++
+ static int asus_kbd_wmi_fan_send(struct asus_drvdata *drvdata, u8 *report_data,
+ 				 size_t report_size)
+ {
+@@ -1195,10 +1227,6 @@ static int asus_input_configured(struct hid_device *hdev, struct hid_input *hi)
+ 
+ 	drvdata->input = input;
+ 
+-	if ((drvdata->quirks & QUIRK_HID_FN_LOCK) &&
+-	    (asus_kbd_fn_lock_set(drvdata, true)))
+-		hid_warn(hdev, "Error while setting FN lock to ON\n");
+-
+ 	return 0;
+ }
+ 
+@@ -1372,6 +1400,9 @@ static int __maybe_unused asus_resume(struct hid_device *hdev)
+ 	if (drvdata->listener.brightness_set)
+ 		asus_kbd_backlight_set(&drvdata->listener, drvdata->kbd_backlight_brightness);
+ 
++	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
++		asus_kbd_fn_lock_set(drvdata, drvdata->fn_lock);
++
+ 	return 0;
+ }
+ 
+@@ -1379,6 +1410,9 @@ static int __maybe_unused asus_reset_resume(struct hid_device *hdev)
+ {
+ 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+ 
++	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
++		asus_kbd_fn_lock_set(drvdata, drvdata->fn_lock);
++
+ 	if (drvdata->tp)
+ 		return asus_start_multitouch(hdev);
+ 
+@@ -1400,6 +1434,7 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
+ 	hid_set_drvdata(hdev, drvdata);
+ 
+ 	drvdata->quirks = id->driver_data;
++	drvdata->fn_lock = fnlock_default;
+ 
+ 	/*
+ 	 * T90CHI's keyboard dock returns same ID values as T100CHI's dock.
+@@ -1508,6 +1543,19 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
+ 		(asus_kbd_register_leds(hdev)))
+ 		hid_warn(hdev, "Failed to initialize backlight.\n");
+ 
++	/*
++	 * Apply Fn-lock only after the init handshake above, which resets the
++	 * keyboard's Fn-lock state.
++	 */
++	if (drvdata->quirks & QUIRK_HID_FN_LOCK) {
++		if (asus_kbd_fn_lock_set(drvdata, drvdata->fn_lock))
++			hid_warn(hdev, "Error while setting FN lock\n");
++
++		ret = device_create_file(&hdev->dev, &dev_attr_fn_lock);
++		if (ret)
++			hid_warn(hdev, "Failed to create fn_lock attribute: %d\n", ret);
++	}
++
+ 	/*
+ 	 * For ROG keyboards, skip rename for consistency and ->input check as
+ 	 * some devices do not have inputs.
+@@ -1536,6 +1584,9 @@ static int asus_probe(struct hid_device *hdev, const struct hid_device_id *id)
+ 
+ 	return 0;
+ err_stop_hw:
++	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
++		device_remove_file(&hdev->dev, &dev_attr_fn_lock);
++
+ 	if (drvdata->listener.brightness_set)
+ 		asus_hid_unregister_listener(&drvdata->listener);
+ 
+@@ -1548,6 +1599,9 @@ static void asus_remove(struct hid_device *hdev)
+ {
+ 	struct asus_drvdata *drvdata = hid_get_drvdata(hdev);
+ 
++	if (drvdata->quirks & QUIRK_HID_FN_LOCK)
++		device_remove_file(&hdev->dev, &dev_attr_fn_lock);
++
+ 	if (drvdata->listener.brightness_set)
+ 		asus_hid_unregister_listener(&drvdata->listener);
+ 

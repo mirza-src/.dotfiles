@@ -21,20 +21,26 @@ in
         inputs.cachyos-kernel.overlays.pinned
       ];
 
-      boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4;
-      boot.extraModulePackages = with config.boot.kernelPackages; [
-        ryzen-smu
-      ];
-      boot.kernelModules = [ "ryzen_smu" ];
-      boot.extraModprobeConfig = ''
-        options asus_wmi fnlock_default=Y
-      '';
       hardware.enableAllFirmware = true;
       hardware.enableAllHardware = true;
+
+      boot.kernelModules = [ "ryzen_smu" ];
+      # Y = F1-F12 without Fn, N = hotkeys without Fn (needs hid-asus-fnlock).
+      # Fn+Esc switches it at runtime.
+      boot.extraModprobeConfig = ''
+        options hid_asus fnlock_default=N
+      '';
+      boot.extraModulePackages = with config.boot.kernelPackages; [
+        ryzen-smu
+        hid-asus-fnlock
+      ];
+      # + our kernel modules from pkgs-kernel/ (see overlay.nix)
+      boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4.extend pkgs.kernelModules;
+
+      services.asusd.enable = true;
       environment.systemPackages = with pkgs; [
         linux-firmware
       ];
-      services.asusd.enable = true;
     })
   ];
 }

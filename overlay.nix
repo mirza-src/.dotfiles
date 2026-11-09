@@ -7,11 +7,24 @@ let
       directory = ./pkgs;
     }
   );
+
+  # Kernel modules from ./pkgs-kernel, as an extension for a kernel package set
+  # (linuxPackages.extend pkgs.kernelModules). Same layout as ./pkgs, but
+  # called with the kernel set's scope (kernel, kernelModuleMakeFlags, ...).
+  kernelModules =
+    kself: _:
+    lib.packagesFromDirectoryRecursive {
+      inherit (kself) callPackage;
+      newScope = extra: final.newScope (kself // extra);
+      directory = ./pkgs-kernel;
+    };
 in
 (lib.mapAttrs (
   name: pkg: if lib.isAttrs pkg then (prev.${name} or { }) // pkg else prev.${name} or pkg
 ) localPackages)
 // {
+  inherit kernelModules;
+
   vscode-insiders = (prev.vscode.override { isInsiders = true; }).overrideAttrs (oldAttrs: rec {
     pname = "vscode-insiders";
     version = "88757eaab9989a8e9f1c6254b3fcdd9ce4d8bb98";
