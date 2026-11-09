@@ -122,7 +122,13 @@ rec {
       in
       {
         # Only direct derivations should be exposed through 'packages'
-        packages = nixpkgs.lib.filterAttrs (_: pkg: nixpkgs.lib.isDerivation pkg) localPackages;
+        packages =
+          nixpkgs.lib.filterAttrs (_: pkg: nixpkgs.lib.isDerivation pkg) localPackages
+          # Kernel modules only make sense against a specific kernel, so take
+          # them from the host that uses them.
+          // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
+            inherit (self.nixosConfigurations.zephyrus.config.boot.kernelPackages) hid-asus-fnlock;
+          };
 
         legacyPackages = localPackages // {
           # Standalone home-manager configuration entrypoint
