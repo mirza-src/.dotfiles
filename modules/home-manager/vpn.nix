@@ -29,7 +29,7 @@ in
         wireguard-tools
       ]
       ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [ eduvpn-client ]
-      ++ (lib.optionals (cfg.networkmanager.enable) [
+      ++ (lib.optionals cfg.networkmanager.enable [
         networkmanager-openconnect
       ]);
   };

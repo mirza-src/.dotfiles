@@ -104,52 +104,49 @@
     enable = true;
     # mutableExtensionsDir = false;
 
-    profiles.default.extensions = (
-      with pkgs.nix-vscode-extensions.vscode-marketplace;
-      [
-        github.copilot-chat
-        anthropic.claude-code
+    profiles.default.extensions = with pkgs.nix-vscode-extensions.vscode-marketplace; [
+      github.copilot-chat
+      anthropic.claude-code
 
-        ms-azuretools.vscode-containers
-        ms-vscode.vscode-speech
-        ms-vscode-remote.remote-containers
-        jnoortheen.nix-ide
-        christian-kohler.path-intellisense
-        mkhl.direnv
-        github.vscode-github-actions
-        eamodio.gitlens
-        gruntfuggly.todo-tree
-        usernamehw.errorlens
-        esbenp.prettier-vscode
-        redhat.vscode-yaml
-        redhat.vscode-xml
-        ms-python.python
-        golang.go
-        dbaeumer.vscode-eslint
-        bradlc.vscode-tailwindcss
-        ms-kubernetes-tools.vscode-kubernetes-tools
-        tamasfe.even-better-toml
+      ms-azuretools.vscode-containers
+      ms-vscode.vscode-speech
+      ms-vscode-remote.remote-containers
+      jnoortheen.nix-ide
+      christian-kohler.path-intellisense
+      mkhl.direnv
+      github.vscode-github-actions
+      eamodio.gitlens
+      gruntfuggly.todo-tree
+      usernamehw.errorlens
+      esbenp.prettier-vscode
+      redhat.vscode-yaml
+      redhat.vscode-xml
+      ms-python.python
+      golang.go
+      dbaeumer.vscode-eslint
+      bradlc.vscode-tailwindcss
+      ms-kubernetes-tools.vscode-kubernetes-tools
+      tamasfe.even-better-toml
 
-        # C/C++
-        ms-vscode.makefile-tools
-        ms-vscode.cpptools-extension-pack
-        ms-vscode.cmake-tools
-        ms-vscode.cpptools
-        ms-vscode.cpptools-themes
+      # C/C++
+      ms-vscode.makefile-tools
+      ms-vscode.cpptools-extension-pack
+      ms-vscode.cmake-tools
+      ms-vscode.cpptools
+      ms-vscode.cpptools-themes
 
-        haskell.haskell
-        tomoki1207.pdf
-        hashicorp.hcl
-        hashicorp.terraform
-        ms-vscode.wordcount
-        theqtcompany.qt-core
-        theqtcompany.qt-qml
+      haskell.haskell
+      tomoki1207.pdf
+      hashicorp.hcl
+      hashicorp.terraform
+      ms-vscode.wordcount
+      theqtcompany.qt-core
+      theqtcompany.qt-qml
 
-        svelte.svelte-vscode
+      svelte.svelte-vscode
 
-        google.selinux-policy-languages
-      ]
-    );
+      google.selinux-policy-languages
+    ];
   };
 
   home.packages = with pkgs; [

@@ -1,12 +1,10 @@
 inputs: final: prev:
 let
-  lib = prev.lib;
-  localPackages = (
-    lib.packagesFromDirectoryRecursive {
-      inherit (final) callPackage newScope;
-      directory = ./pkgs;
-    }
-  );
+  inherit (prev) lib;
+  localPackages = lib.packagesFromDirectoryRecursive {
+    inherit (final) callPackage newScope;
+    directory = ./pkgs;
+  };
 
   # Kernel modules from ./pkgs-kernel, as an extension for a kernel package set
   # (linuxPackages.extend pkgs.kernelModules). Same layout as ./pkgs, but
