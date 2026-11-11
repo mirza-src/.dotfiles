@@ -35,7 +35,10 @@
   # NixOS release of the first install; don't bump (see `man configuration.nix`).
   system.stateVersion = "25.05";
 
-  modules.defaults.enable = true;
+  modules.defaults = {
+    enable = true;
+    primaryUser = "mirza";
+  };
   modules.shell.enable = true;
   modules.nix.enable = true;
   services.rke2.enable = false;
