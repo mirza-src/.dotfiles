@@ -27,7 +27,5 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
   };
 
   # Not available on macOS: veracrypt, protonplus, rocketchat-desktop,
-  # Dolphin/Ark, i2c-tools, eduvpn-client. The systemd ssh-agent is Linux
-  # only; macOS runs its own agent (Bitwarden stays the default via
-  # programs.ssh-agent-switch in default.nix).
+  # Dolphin/Ark, i2c-tools, eduvpn-client.
 }

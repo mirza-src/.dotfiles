@@ -8,8 +8,6 @@
   ...
 }:
 lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
-  services.ssh-agent.enable = true;
-  programs.ssh-agent-switch.agents.local = "$XDG_RUNTIME_DIR/${config.services.ssh-agent.socket}";
 
   programs.vscode.package = pkgs.vscode.fhsWithPackages (
     pkgs: with pkgs; [

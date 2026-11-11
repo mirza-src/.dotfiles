@@ -3,6 +3,7 @@
 # Dotfiles live in ./.config; each layer lists the folders it links.
 {
   config,
+  lib,
   pkgs,
   ...
 }:
@@ -42,7 +43,15 @@
     enable = true;
     defaultAgent = "bitwarden";
     agents.bitwarden = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
+    # Plain OpenSSH agent (systemd on Linux, launchd on macOS). Expanded at
+    # runtime: the socket lives in a per-user temp dir.
+    agents.local =
+      if pkgs.stdenv.hostPlatform.isDarwin then
+        "$(${lib.getExe pkgs.getconf} DARWIN_USER_TEMP_DIR)/${config.services.ssh-agent.socket}"
+      else
+        "$XDG_RUNTIME_DIR/${config.services.ssh-agent.socket}";
   };
+  services.ssh-agent.enable = true;
 
   programs.firefox.enable = true;
   programs.lapce.enable = true;
