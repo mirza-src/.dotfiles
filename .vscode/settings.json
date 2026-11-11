@@ -40,14 +40,14 @@
         "command": ["nixfmt"]
       },
       "nixpkgs": {
-        "expr": "import <nixpkgs> { }"
+        "expr": "import (builtins.getFlake (builtins.toString ./.)).inputs.nixpkgs { }"
       },
       "options": {
         "nixos": {
-          "expr": "(builtins.getFlake (builtins.toString ./.)).nixosConfigurations.proart-p16.options"
+          "expr": "(builtins.getFlake (builtins.toString ./.)).nixosConfigurations.zephyrus.options"
         },
         "home-manager": {
-          "expr": "(builtins.getFlake (builtins.toString ./.)).packages.x86_64-linux.homeConfigurations.mirza.options"
+          "expr": "(builtins.getFlake (builtins.toString ./.)).legacyPackages.x86_64-linux.homeConfigurations.mirza.options"
         }
       }
     }
