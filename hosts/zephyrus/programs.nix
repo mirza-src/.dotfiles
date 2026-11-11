@@ -13,13 +13,11 @@
 
   programs.git.enable = true;
   programs.vim.enable = true;
-  services.avahi.enable = true;
 
   # List packages installed in system profile. To search, run:
   # $ nix search wget
   environment.systemPackages = with pkgs; [
-    # Core utilities
-    git
+    # Core utilities (git comes from programs.git)
     wget
     curl
     jq
@@ -50,6 +48,5 @@
     gparted
 
     adwaita-icon-theme
-    bitwarden-desktop
   ];
 }
