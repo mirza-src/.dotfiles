@@ -37,6 +37,9 @@ in
     nix.settings.extra-substituters = nixConfig.extra-substituters;
     nix.settings.extra-trusted-public-keys = nixConfig.extra-trusted-public-keys;
 
+    # Hard-link identical store files (periodic, not on every build).
+    nix.optimise.automatic = true;
+
     home-manager.useGlobalPkgs = lib.mkDefault true;
     home-manager.useUserPackages = lib.mkDefault true;
 

@@ -27,6 +27,20 @@ in
 
     boot.supportedFilesystems = [ "ntfs" ];
 
+    # Keep /boot (1 GB ESP) from filling up; specialisations add entries too.
+    boot.loader.systemd-boot.configurationLimit = lib.mkDefault 5;
+
+    # nh: nicer rebuilds (`nh os switch`, `nh home switch`) and a weekly
+    # cleanup of old system and user (incl. home-manager) generations.
+    programs.nh = {
+      enable = true;
+      flake = "/home/mirza/.dotfiles";
+      clean = {
+        enable = true;
+        extraArgs = "--keep 5 --keep-since 7d";
+      };
+    };
+
     services.logind.settings.Login = {
       HandlePowerKey = "hibernate";
       HandleSuspendKey = "suspend";
