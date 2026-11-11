@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.giantswarm = {
-    enable = mkEnableOption "Enable GiantSwarm tools";
+    enable = mkEnableOption "GiantSwarm tools";
   };
 
   config = mkIf cfg.enable {

@@ -17,7 +17,7 @@ in
   ];
 
   options.modules.gpu.amd = {
-    enable = mkEnableOption "Enable AMD GPU Options";
+    enable = mkEnableOption "AMD GPU Options";
   };
 
   config = mkIf cfg.enable {

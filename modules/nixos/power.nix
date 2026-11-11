@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.power = {
-    enable = mkEnableOption "Enable power management optimizations and tools";
+    enable = mkEnableOption "power management optimizations and tools";
   };
 
   config = mkIf cfg.enable {

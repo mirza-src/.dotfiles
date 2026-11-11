@@ -13,10 +13,10 @@ let
 in
 {
   options.modules.vpn = {
-    enable = mkEnableOption "Enable VPN tools";
+    enable = mkEnableOption "VPN tools";
 
     networkmanager = {
-      enable = mkEnableOption "Enable NetworkManager Integration";
+      enable = mkEnableOption "NetworkManager Integration";
     };
   };
 

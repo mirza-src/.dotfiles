@@ -24,9 +24,9 @@ let
 in
 {
   options.services.mango-headless = {
-    enable = mkEnableOption "Enable a headless Mango compositor for Sunshine.";
+    enable = mkEnableOption "a headless Mango compositor for Sunshine";
 
-    autoStart = mkEnableOption "Automatically start the headless Mango compositor";
+    autoStart = mkEnableOption "starting the headless Mango compositor automatically";
 
     width = mkOption {
       default = 1920;

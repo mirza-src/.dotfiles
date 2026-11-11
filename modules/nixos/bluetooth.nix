@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.bluetooth = {
-    enable = mkEnableOption "Enable sane bluetooth configuration";
+    enable = mkEnableOption "sane bluetooth configuration";
   };
 
   config = mkIf cfg.enable {

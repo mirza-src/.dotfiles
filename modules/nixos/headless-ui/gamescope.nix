@@ -32,7 +32,7 @@ let
 in
 {
   options.services.gamescope-headless = {
-    enable = mkEnableOption "Enable a headless Gamescope compositor running idle for Sunshine streaming.";
+    enable = mkEnableOption "a headless Gamescope compositor running idle for Sunshine streaming";
 
     autoStart = mkOption {
       default = true;

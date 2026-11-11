@@ -18,7 +18,7 @@ in
   ];
 
   options.modules.secure-boot = {
-    enable = mkEnableOption "Enable Secure Boot Options";
+    enable = mkEnableOption "Secure Boot with lanzaboote";
   };
 
   config = mkIf cfg.enable {

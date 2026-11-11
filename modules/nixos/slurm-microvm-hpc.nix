@@ -20,7 +20,7 @@ in
   ];
 
   options.modules.slurm-microvm-hpc = {
-    enable = mkEnableOption "Enable Slurm HPC";
+    enable = mkEnableOption "Slurm HPC";
 
     hypervisor = mkOption {
       type = types.enum inputs.microvm.lib.hypervisors;

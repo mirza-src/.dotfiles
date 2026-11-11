@@ -28,9 +28,9 @@ let
 in
 {
   options.services.niri-headless = {
-    enable = mkEnableOption "Enable a headless Niri compositor.";
+    enable = mkEnableOption "a headless Niri compositor";
 
-    autoStart = mkEnableOption "Automatically start the headless Niri compositor";
+    autoStart = mkEnableOption "starting the headless Niri compositor automatically";
 
     width = mkOption {
       default = 1920;
@@ -63,13 +63,13 @@ in
     };
 
     include-home-config =
-      (mkEnableOption "Whether to include the user's home config in the headless Niri compositor.")
+      (mkEnableOption "the user's home config in the headless Niri compositor")
       // {
         default = true;
       };
 
     wayvnc = {
-      enable = (mkEnableOption "Enable the wayvnc VNC server for the headless Niri compositor.") // {
+      enable = (mkEnableOption "the wayvnc VNC server for the headless Niri compositor") // {
         default = true;
       };
 

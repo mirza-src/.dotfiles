@@ -19,7 +19,7 @@ in
   ];
 
   options.modules.gpu.nvidia = {
-    enable = mkEnableOption "Enable Nvidia GPU Configuration";
+    enable = mkEnableOption "Nvidia GPU Configuration";
   };
 
   config = mkIf cfg.enable {

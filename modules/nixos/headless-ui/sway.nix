@@ -29,9 +29,9 @@ let
 in
 {
   options.services.sway-headless = {
-    enable = mkEnableOption "Enable a headless Sway compositor for Sunshine.";
+    enable = mkEnableOption "a headless Sway compositor for Sunshine";
 
-    autoStart = mkEnableOption "Automatically start the headless Sway compositor";
+    autoStart = mkEnableOption "starting the headless Sway compositor automatically";
 
     mode = mkOption {
       default = "1920x1080@60Hz";

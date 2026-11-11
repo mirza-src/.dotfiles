@@ -14,7 +14,7 @@ let
 in
 {
   options.modules.asus = {
-    enable = mkEnableOption "Enable ASUS Configuration Options";
+    enable = mkEnableOption "ASUS Configuration Options";
   };
 
   config = lib.mkMerge [

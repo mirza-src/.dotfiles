@@ -18,7 +18,7 @@ in
   ];
 
   options.modules.gaming = {
-    enable = mkEnableOption "Enable gaming optimizations and tools";
+    enable = mkEnableOption "gaming optimizations and tools";
   };
 
   config = mkIf cfg.enable {

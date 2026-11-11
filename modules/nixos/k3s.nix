@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.k3s = {
-    enable = mkEnableOption "Enable K3s Kubernetes cluster";
+    enable = mkEnableOption "K3s Kubernetes cluster";
   };
 
   config = mkIf cfg.enable {

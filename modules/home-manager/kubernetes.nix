@@ -16,7 +16,7 @@ let
 in
 {
   options.modules.kubernetes = {
-    enable = mkEnableOption "Enable Kubernetes tools";
+    enable = mkEnableOption "Kubernetes tools";
 
     helmPlugins = mkOption {
       type = types.listOf types.package;

@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.nix = {
-    enable = mkEnableOption "Enable Nix optimizations and tools";
+    enable = mkEnableOption "Nix optimizations and tools";
   };
 
   config = mkIf cfg.enable {

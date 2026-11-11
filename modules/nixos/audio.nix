@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.audio = {
-    enable = mkEnableOption "Enable sane audio configuration";
+    enable = mkEnableOption "sane audio configuration";
   };
 
   config = mkIf cfg.enable {

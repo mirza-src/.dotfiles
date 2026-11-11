@@ -8,7 +8,7 @@ let
 in
 {
   options.modules.silent-boot = {
-    enable = mkEnableOption "Enable Silent Booting";
+    enable = mkEnableOption "silent boot (Plymouth, no console output)";
   };
 
   config = mkIf cfg.enable {

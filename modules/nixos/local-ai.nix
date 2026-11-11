@@ -20,7 +20,7 @@ in
   options.modules.local-ai = {
     enable = mkEnableOption "Local AI stack featuring Ollama, Open WebUI, and OpenCode";
 
-    autostart = mkEnableOption "Start the local AI stack automatically at boot.";
+    autostart = mkEnableOption "starting the local AI stack automatically at boot";
 
     gpuAcceleration = mkOption {
       type = types.enum [

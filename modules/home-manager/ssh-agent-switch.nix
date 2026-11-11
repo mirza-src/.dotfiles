@@ -17,7 +17,7 @@ let
 in
 {
   options.programs.ssh-agent-switch = {
-    enable = lib.mkEnableOption "Declarative SSH agent switching";
+    enable = lib.mkEnableOption "declarative SSH agent switching";
 
     agents = lib.mkOption {
       type = lib.types.attrsOf lib.types.str;

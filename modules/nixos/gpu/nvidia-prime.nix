@@ -20,7 +20,7 @@ in
   ];
 
   options.modules.gpu.nvidia-prime = {
-    enable = mkEnableOption "Enable Nvidia Prime Hybrid GPU Offload";
+    enable = mkEnableOption "Nvidia Prime Hybrid GPU Offload";
     intelBusId = mkOption {
       type = types.nullOr types.str;
       default = null;

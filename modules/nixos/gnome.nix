@@ -15,7 +15,7 @@ let
 in
 {
   options.modules.gnome = {
-    enable = mkEnableOption "Enable GNOME Desktop Environment";
+    enable = mkEnableOption "GNOME Desktop Environment";
     extensions = mkOption {
       default = with pkgs.gnomeExtensions; [
         appindicator

@@ -13,7 +13,7 @@ let
 in
 {
   options.modules.gpu = {
-    enable = mkEnableOption "Enable general GPU tools and settings";
+    enable = mkEnableOption "general GPU tools and settings";
   };
 
   config = mkIf cfg.enable {
