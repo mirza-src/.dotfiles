@@ -5,17 +5,12 @@
   lib,
   pkgs,
   config,
-  inputs,
   ...
 }:
 let
   cfg = config.modules.defaults;
 in
 {
-  imports = [
-    inputs.home-manager.nixosModules.home-manager
-  ];
-
   config = lib.mkIf cfg.enable {
     boot.supportedFilesystems = [ "ntfs" ];
 

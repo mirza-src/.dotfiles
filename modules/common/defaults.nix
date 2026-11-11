@@ -1,7 +1,7 @@
 # Host defaults shared by NixOS and nix-darwin. The platform halves
 # (../nixos/defaults.nix, a future ../darwin/defaults.nix) add their own
-# settings under the same `modules.defaults.enable`, and import the matching
-# home-manager system module (home-manager.nixosModules / darwinModules).
+# settings under the same `modules.defaults.enable`. Home-manager runs
+# standalone (homeConfigurations in flake.nix), not as a system module.
 {
   self,
   lib,
@@ -39,9 +39,6 @@ in
 
     # Hard-link identical store files (periodic, not on every build).
     nix.optimise.automatic = true;
-
-    home-manager.useGlobalPkgs = lib.mkDefault true;
-    home-manager.useUserPackages = lib.mkDefault true;
 
     environment.systemPackages = with pkgs; [
       git
