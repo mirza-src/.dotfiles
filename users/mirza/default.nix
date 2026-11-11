@@ -170,18 +170,8 @@
     bitwarden-cli
     lite-xl
 
-    # TODO: Move to project-specific devenv configurations
-    (haskellPackages.ghcWithPackages (
-      pkgs: with pkgs; [
-        QuickCheck
-        cabal-install
-      ]
-    ))
-    haskell-language-server
-    nodejs
-    python3
-    jdk
-    glpk
+    # Language toolchains (GHC, node, python, JDK, ...) live in per-project
+    # devenv shells: `nix flake init -t ~/.dotfiles` for a new project.
 
     # Utilities
     bleachbit
