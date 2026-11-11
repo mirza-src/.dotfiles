@@ -8,7 +8,7 @@
 }:
 let
   cfg = config.modules.defaults;
-  inherit (pkgs.stdenv.hostPlatform) isDarwin isLinux;
+  inherit (pkgs.stdenv.hostPlatform) isDarwin;
 in
 {
   options.modules.defaults.enable = lib.mkEnableOption "default user settings";
@@ -71,8 +71,8 @@ in
         if isDarwin then "/Users/${username}" else "/home/${username}"
       );
       nix.package = lib.mkDefault pkgs.nix;
+      nixpkgs.overlays = lib.attrValues self.overlays;
       nixpkgs.config.allowUnfree = lib.mkDefault true;
-      nixpkgs.config.cudaSupport = lib.mkDefault isLinux;
       nixpkgs.config.permittedInsecurePackages = [
         "electron-39.8.10"
       ];
