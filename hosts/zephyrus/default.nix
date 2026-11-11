@@ -9,6 +9,7 @@
   imports = [
     ./programs.nix
     ./users.nix
+    ./sunshine.nix
 
     ./hardware-configuration.nix
 
@@ -119,48 +120,6 @@
       }
     ];
   };
-
-  # services.mango-headless.enable = true;
-  # services.mango-headless.wlr-render-device = "/dev/dri/renderD129"; # AMD GPU render node
-  systemd.user.services.mango-headless.bindsTo = [ "sunshine.service" ];
-  systemd.user.services.mango-headless.before = [ "sunshine.service" ];
-  systemd.user.services.sunshine.requires = [ "mango-headless.service" ];
-  systemd.user.services.sunshine.after = [ "mango-headless.service" ];
-  services.sunshine = {
-    enable = true;
-    autoStart = false;
-    capSysAdmin = true;
-    openFirewall = true;
-    settings = {
-      adapter_name = "/dev/dri/renderD129";
-      encoder = "vaapi";
-    };
-    applications = {
-      apps = [
-        {
-          name = "Steam";
-          detached = [
-            "${pkgs.util-linux}/bin/setsid ${pkgs.steam}/bin/steam steam://open/bigpicture"
-          ];
-          prep-cmd = [
-            # {
-            #   do = "mmsg dispatch create_virtual_output,HEADLESS-1";
-            #   undo = "mmsg dispatch destroy_virtual_output,HEADLESS-1";
-            # }
-            # {
-            #   do = "wlr-randr --output HEADLESS-1 --cusotm-mode \${SUNSHINE_CLIENT_WIDTH}x\${SUNSHINE_CLIENT_HEIGHT}@\${SUNSHINE_CLIENT_FPS}Hz";
-            # }
-          ];
-        }
-      ];
-    };
-  };
-  systemd.user.services.sunshine.environment.WAYLAND_DISPLAY =
-    config.services.mango-headless.wayland-display;
-  systemd.user.services.sunshine.environment.MANGO_INSTANCE_SIGNATURE =
-    config.services.mango-headless.socket;
-  systemd.user.services.sunshine.environment.XDG_SESSION_TYPE = "wayland";
-  systemd.user.services.sunshine.environment.XDG_CURRENT_DESKTOP = "mango";
 
   services.avahi.enable = true;
   # Forcefully nullify the legacy options to stop upstream modules from triggering the warnings
