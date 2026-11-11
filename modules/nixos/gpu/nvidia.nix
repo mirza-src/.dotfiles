@@ -21,7 +21,6 @@ in
   config = mkIf cfg.enable {
     modules.gpu.enable = true;
     services.xserver.videoDrivers = [ "nvidia" ];
-    nixpkgs.config.cudaSupport = true;
     services.supergfxd.enable = false;
     services.cardwired = {
       enable = true;
@@ -45,8 +44,6 @@ in
 
     environment.systemPackages = with pkgs; [
       nvitop
-      cudatoolkit
-      cudaPackages.cuda_nvcc
     ];
 
     hardware.nvidia = {
