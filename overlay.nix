@@ -19,11 +19,20 @@ let
 in
 # Local packages replace nixpkgs' of the same name; local package sets (e.g.
 # giantswarm, dms-plugins) are merged into nixpkgs' set of that name, if any.
-# The scope's own functions (callPackage, newScope, overrideScope, ...) are
-# dropped so they don't shadow nixpkgs'.
-lib.pipe localPackages [
-  (lib.filterAttrs (_: lib.isAttrs))
-  (lib.mapAttrs (name: pkg: if lib.isDerivation pkg then pkg else (prev.${name} or { }) // pkg))
+# Names come from the directory listing, not from localPackages: an overlay's
+# attribute names must not depend on evaluating packages built from `final`
+# (infinite recursion), and this also leaves out the scope's own functions
+# (callPackage, newScope, overrideScope, ...).
+lib.pipe (builtins.readDir ./pkgs) [
+  (lib.filterAttrs (name: type: type == "directory" || lib.hasSuffix ".nix" name))
+  (lib.mapAttrs' (
+    name: _:
+    let
+      attr = lib.removeSuffix ".nix" name;
+      pkg = localPackages.${attr};
+    in
+    lib.nameValuePair attr (if lib.isDerivation pkg then pkg else (prev.${attr} or { }) // pkg)
+  ))
 ]
 // {
   inherit kernelModules;
