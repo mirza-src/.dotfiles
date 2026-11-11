@@ -17,7 +17,7 @@ in
   };
 
   config = mkIf cfg.enable {
-    home.packages = (
+    home.packages =
       with pkgs;
       [
         go
@@ -53,8 +53,7 @@ in
         nancy-fixer
         schemadocs
         schemalint
-      ])
-    );
+      ]);
 
     # helm itself comes from the kubernetes module, wrapped with this plugin.
     modules.kubernetes.enable = true;
