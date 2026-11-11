@@ -9,6 +9,7 @@
   config,
   inputs,
   hostname,
+  nixConfig,
   ...
 }:
 let
@@ -31,6 +32,10 @@ in
     ];
     # Admin group: wheel on NixOS, admin on macOS.
     nix.settings.trusted-users = [ (if pkgs.stdenv.hostPlatform.isDarwin then "@admin" else "@wheel") ];
+    # The flake's binary caches, for the daemon itself: without them a skipped
+    # accept-flake-config prompt means building e.g. the CachyOS kernel locally.
+    nix.settings.extra-substituters = nixConfig.extra-substituters;
+    nix.settings.extra-trusted-public-keys = nixConfig.extra-trusted-public-keys;
 
     home-manager.useGlobalPkgs = lib.mkDefault true;
     home-manager.useUserPackages = lib.mkDefault true;
