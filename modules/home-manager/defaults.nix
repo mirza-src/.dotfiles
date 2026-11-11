@@ -62,11 +62,6 @@ in
         if isDarwin then "/Users/${username}" else "/home/${username}"
       );
       nix.package = lib.mkDefault pkgs.nix;
-      nixpkgs.overlays = lib.attrValues self.overlays;
-      nixpkgs.config.allowUnfree = lib.mkDefault true;
-      nixpkgs.config.permittedInsecurePackages = [
-        "electron-39.8.10"
-      ];
     })
   ];
 }

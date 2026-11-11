@@ -159,7 +159,19 @@ rec {
           homeConfigurations = lib.genAttrs (self.lib.listNixModules ./users) (
             username:
             home-manager.lib.homeManagerConfiguration {
-              pkgs = nixpkgs.legacyPackages.${system}; # Home-manager requires 'pkgs' instance
+              # One nixpkgs with all overlays and config, so modules don't set
+              # nixpkgs.* (which would make home-manager import it again).
+              pkgs = import nixpkgs {
+                inherit system;
+                overlays = lib.attrValues self.overlays ++ [
+                  inputs.vscode-extensions.overlays.default
+                  inputs.giantswarm.overlay
+                ];
+                config = {
+                  allowUnfree = true;
+                  permittedInsecurePackages = [ "electron-39.8.10" ];
+                };
+              };
               extraSpecialArgs = {
                 inherit self inputs username;
               };

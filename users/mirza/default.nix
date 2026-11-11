@@ -4,7 +4,6 @@
 {
   config,
   pkgs,
-  inputs,
   ...
 }:
 {
@@ -99,9 +98,6 @@
       target = "Documents/tinkering";
     };
   };
-
-  # pkgs.nix-vscode-extensions, for the extensions below.
-  nixpkgs.overlays = [ inputs.vscode-extensions.overlays.default ];
 
   # Package: plain VS Code here; Linux swaps in the FHS build (linux.nix).
   programs.vscode = {

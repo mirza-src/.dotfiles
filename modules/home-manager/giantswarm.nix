@@ -2,7 +2,6 @@
   lib,
   pkgs,
   config,
-  inputs,
   ...
 }:
 with lib;
@@ -15,8 +14,6 @@ in
   };
 
   config = mkIf cfg.enable {
-    nixpkgs.overlays = [ inputs.giantswarm.overlay ];
-
     home.packages = (
       with pkgs;
       [
@@ -41,7 +38,7 @@ in
           polkitPolicyOwners = [ config.home.username ];
         })
 
-        # From nix-gs (inputs.giantswarm.overlay)
+        # From nix-gs (its overlay is applied in flake.nix)
         architect
         devctl
         kubectl-gs
