@@ -33,6 +33,7 @@ in
       boot.extraModulePackages = with config.boot.kernelPackages; [
         ryzen-smu
         hid-asus-fnlock
+        mt7925-regd-fix # AirDrop (AWDL) broken by 7.3's self-managed regd
       ];
       # + our kernel modules from pkgs-kernel/ (see overlay.nix)
       boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4.extend pkgs.kernelModules;

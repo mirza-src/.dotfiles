@@ -1,0 +1,19 @@
+mt7925: never use the self-managed regulatory domain (upstream e9f3f1cc13)
+
+diff --git a/drivers/net/wireless/mediatek/mt76/mt7925/regd.h b/drivers/net/wireless/mediatek/mt76/mt7925/regd.h
+index 65ef2b140f..e3357f0c91 100644
+--- a/drivers/net/wireless/mediatek/mt76/mt7925/regd.h
++++ b/drivers/net/wireless/mediatek/mt76/mt7925/regd.h
+@@ -55,9 +55,10 @@ struct mt7925_regd_query_req {
+ 	u8 data[];
+ };
+ 
+-#define MT7925_REGD_SUPPORTED(phy) \
++/* Self-managed regd breaks frame injection (AWDL/omdrop-owl) on MT7925. */
++#define MT7925_REGD_SUPPORTED(phy) (false && \
+ 	(((phy)->chip_cap & MT792x_CHIP_CAP_REGD_EN) && \
+-	(phy)->clc[MT792x_CLC_REGD])
++	(phy)->clc[MT792x_CLC_REGD]))
+ 
+ int mt7925_mcu_regd_update(struct mt792x_dev *dev, u8 *alpha2,
+ 			   enum environment_cap country_ie_env);
