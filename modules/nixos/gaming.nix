@@ -53,8 +53,8 @@ in
       localNetworkGameTransfers.openFirewall = true; # Open ports in the firewall for Steam Local Network Game Transfers
     };
 
+    # gamescope itself comes from programs.gamescope.
     environment.systemPackages = with pkgs; [
-      gamescope
       mangohud
       steamtinkerlaunch
     ];
