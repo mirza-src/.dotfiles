@@ -35,33 +35,34 @@ in
         linkDirs =
           paths:
           lib.listToAttrs (
-            map (
-              file:
-              let
-                parts = lib.splitString "/.config/" (toString file);
-              in
-              assert lib.assertMsg (
-                lib.length parts > 1
-              ) "lib.dotfiles.linkDirs: ${toString file} is not under a .config directory";
-              {
-                name = lib.last parts;
-                value.source = mkMutableSymlink file;
-              }
-            ) (
-              lib.concatMap (
-                path: if lib.pathIsDirectory path then lib.filesystem.listFilesRecursive path else [ path ]
-              ) paths
-            )
+            map
+              (
+                file:
+                let
+                  parts = lib.splitString "/.config/" (toString file);
+                in
+                assert lib.assertMsg (
+                  lib.length parts > 1
+                ) "lib.dotfiles.linkDirs: ${toString file} is not under a .config directory";
+                {
+                  name = lib.last parts;
+                  value.source = mkMutableSymlink file;
+                }
+              )
+              (
+                lib.concatMap (
+                  path: if lib.pathIsDirectory path then lib.filesystem.listFilesRecursive path else [ path ]
+                ) paths
+              )
           );
       };
     }
 
     (lib.mkIf cfg.enable {
       home.username = lib.mkDefault username;
-      home.homeDirectory = lib.mkDefault (
-        if isDarwin then "/Users/${username}" else "/home/${username}"
-      );
-      nix.package = lib.mkDefault pkgs.nix;
+      home.homeDirectory = lib.mkDefault (if isDarwin then "/Users/${username}" else "/home/${username}");
+      # Same Nix as the system: Lix on macOS (modules/darwin/defaults.nix).
+      nix.package = lib.mkDefault (if isDarwin then pkgs.lix else pkgs.nix);
     })
   ];
 }
