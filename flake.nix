@@ -183,6 +183,31 @@ rec {
       # `nix fmt`: nixfmt over the whole tree
       formatter = forAllSystems (system: pkgsFor.${system}.nixfmt-tree);
 
+      # `nix flake check`: lint with statix and deadnix
+      checks = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor.${system};
+        in
+        {
+          lint =
+            pkgs.runCommand "lint"
+              {
+                nativeBuildInputs = [
+                  pkgs.statix
+                  pkgs.deadnix
+                ];
+              }
+              ''
+                cd ${self}
+                statix check --config ${./statix.toml} .
+                # Lambda args (overlay/callPackage signatures) are often unused on purpose.
+                deadnix --fail --no-lambda-arg --exclude hosts/zephyrus/hardware-configuration.nix .
+                touch $out
+              '';
+        }
+      );
+
       devShells = forAllSystems (
         system:
         let

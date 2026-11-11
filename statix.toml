@@ -1,0 +1,2 @@
+# Flat `a.b.c = ...;` assignments are this repo's style.
+disabled = [ "repeated_keys" ]
