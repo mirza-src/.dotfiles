@@ -26,6 +26,18 @@ in
       description = "The machine's main user: owns the dotfiles checkout and the desktop/macOS settings.";
     };
 
+    displayName = lib.mkOption {
+      type = lib.types.str;
+      default = lib.toUpper (lib.substring 0 1 hostname) + lib.substring 1 (-1) hostname;
+      defaultText = lib.literalMD "the hostname, capitalised";
+      example = "Zephyrus G14";
+      description = ''
+        Human-readable machine name, shown in AirDrop, Bluetooth and network
+        sharing (macOS ComputerName, systemd's pretty hostname). The hostname
+        itself stays lowercase.
+      '';
+    };
+
     flake = lib.mkOption {
       type = lib.types.str;
       default = "${if isDarwin then "/Users" else "/home"}/${cfg.primaryUser}/.dotfiles";

@@ -38,6 +38,7 @@
   modules.defaults = {
     enable = true;
     primaryUser = "mirza";
+    displayName = "Zephyrus G14";
   };
   modules.shell.enable = true;
   modules.nix.enable = true;

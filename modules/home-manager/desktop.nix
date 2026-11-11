@@ -62,11 +62,22 @@ in
         home.file.".local/bin/omdrop".source = "${pkgs.omdrop}/bin/omdrop";
         xdg.configFile."systemd/user/airdrop-receiver.service".source =
           "${pkgs.omdrop}/share/systemd/user/airdrop-receiver.service";
+        # - AirDrop name: the host's display name (pretty hostname, e.g.
+        #   "Zephyrus G14") instead of the bare hostname. Written to the
+        #   receiver's config only when it has no name yet, so `omdrop`'s own
+        #   setting wins; the file stays writable for omdrop.
         # Exit codes: 0 created, 1 already present, 2 error. Without
         # accepting 1, every activation after the first stopped here.
         home.activation.omdropIdentity = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          omdropName=$(. /etc/machine-info 2>/dev/null; echo "''${PRETTY_HOSTNAME:-}")
+          omdropName=''${omdropName:-$(cat /proc/sys/kernel/hostname)}
+          omdropConfig="${config.xdg.configHome}/airdrop/config.toml"
+          if [[ ! -v DRY_RUN ]] && ! grep -qs '^name *=' "$omdropConfig"; then
+            mkdir -p "$(dirname "$omdropConfig")"
+            printf 'name = "%s"\n' "$omdropName" >> "$omdropConfig"
+          fi
           run ${pkgs.omdrop}/libexec/omdrop/omdrop-ensure-identity \
-            --name "$(cat /proc/sys/kernel/hostname)" || [ $? -eq 1 ]
+            --name "$omdropName" || [ $? -eq 1 ]
         '';
       })
 

@@ -16,6 +16,11 @@ in
     # Keep /boot (1 GB ESP) from filling up.
     boot.loader.systemd-boot.configurationLimit = lib.mkDefault 5;
 
+    # Display name (AirDrop, Bluetooth, GNOME/KDE): systemd's pretty hostname.
+    environment.etc."machine-info".text = ''
+      PRETTY_HOSTNAME="${cfg.displayName}"
+    '';
+
     services.logind.settings.Login = {
       HandlePowerKey = "hibernate";
       HandleSuspendKey = "suspend";
