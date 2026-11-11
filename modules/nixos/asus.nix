@@ -39,9 +39,6 @@ in
       boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4.extend pkgs.kernelModules;
 
       services.asusd.enable = true;
-      environment.systemPackages = with pkgs; [
-        linux-firmware
-      ];
     })
   ];
 }
