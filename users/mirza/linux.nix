@@ -16,11 +16,6 @@ lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
     ]
   );
 
-  # Obsidian's config dir has to exist before the vault module writes to it.
-  home.activation.createObsidianDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-    run mkdir -p ${config.xdg.configHome}/obsidian
-  '';
-
   home.packages = with pkgs; [
     i2c-tools
     gcr_4 # GNOME keyring prompts (gcr-prompter)

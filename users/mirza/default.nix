@@ -107,6 +107,15 @@
       target = "Documents/tinkering";
     };
   };
+  # Obsidian's config dir has to exist before the vault module writes to it.
+  home.activation.createObsidianDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run mkdir -p "${
+      if pkgs.stdenv.hostPlatform.isDarwin then
+        "${config.home.homeDirectory}/Library/Application Support"
+      else
+        config.xdg.configHome
+    }/obsidian"
+  '';
 
   # Package: plain VS Code here; Linux swaps in the FHS build (linux.nix).
   programs.vscode = {
