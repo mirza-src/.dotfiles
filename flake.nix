@@ -184,6 +184,9 @@ rec {
         }
       );
 
+      # `nix fmt`: nixfmt over the whole tree
+      formatter = forAllSystems (system: pkgsFor.${system}.nixfmt-tree);
+
       devShells = forAllSystems (
         system:
         let
