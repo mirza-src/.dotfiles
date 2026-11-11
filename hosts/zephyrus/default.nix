@@ -86,18 +86,16 @@
   networking.firewall.trustedInterfaces = [ "incusbr0" ];
   virtualisation.spiceUSBRedirection.enable = true;
 
+  # Key-only SSH (openFirewall opens TCP 22). Add public keys via
+  # users.users.<name>.openssh.authorizedKeys.keys or ~/.ssh/authorized_keys.
   services.openssh = {
     enable = true;
-    ports = [ 22 ];
     settings = {
-      PasswordAuthentication = true;
-      UseDns = true;
-      X11Forwarding = true;
-      PermitRootLogin = "yes";
+      PasswordAuthentication = false;
+      KbdInteractiveAuthentication = false;
+      PermitRootLogin = "no";
     };
   };
-  networking.firewall.allowedTCPPorts = [ 22 ];
-  networking.firewall.allowedUDPPorts = [ 22 ];
 
   networking.wg-quick.interfaces.hs-fulda = {
     autostart = false;
