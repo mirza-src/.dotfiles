@@ -33,7 +33,7 @@
   ];
 
   # NixOS release of the first install; don't bump (see `man configuration.nix`).
-  system.stateVersion = "25.05";
+  system.stateVersion = "26.11";
 
   modules.defaults = {
     enable = true;
