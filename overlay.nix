@@ -19,9 +19,14 @@ let
       directory = ./pkgs-kernel;
     };
 in
-(lib.mapAttrs (
-  name: pkg: if lib.isAttrs pkg then (prev.${name} or { }) // pkg else prev.${name} or pkg
-) localPackages)
+# Local packages replace nixpkgs' of the same name; local package sets (e.g.
+# giantswarm, dms-plugins) are merged into nixpkgs' set of that name, if any.
+# The scope's own functions (callPackage, newScope, overrideScope, ...) are
+# dropped so they don't shadow nixpkgs'.
+lib.pipe localPackages [
+  (lib.filterAttrs (_: lib.isAttrs))
+  (lib.mapAttrs (name: pkg: if lib.isDerivation pkg then pkg else (prev.${name} or { }) // pkg))
+]
 // {
   inherit kernelModules;
 
