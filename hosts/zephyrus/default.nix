@@ -42,7 +42,6 @@
   modules.locale = "en_US.UTF-8";
   services.xserver.xkb.layout = "us";
   time.timeZone = null;
-  time.hardwareClockInLocalTime = true;
   services.automatic-timezoned.enable = true;
 
   modules.audio.enable = true;
