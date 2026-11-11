@@ -5,8 +5,13 @@
   inputs,
   ...
 }:
-with lib;
 let
+  inherit (lib)
+    mkEnableOption
+    mkIf
+    mkOption
+    types
+    ;
   cfg = config.modules.slurm-microvm-hpc;
 in
 {

@@ -1,6 +1,9 @@
 { lib, config, ... }:
-with lib;
 let
+  inherit (lib)
+    mkOption
+    types
+    ;
   cfg = config.modules.locale;
 in
 {

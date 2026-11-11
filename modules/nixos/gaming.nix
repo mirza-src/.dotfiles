@@ -5,8 +5,11 @@
   inputs,
   ...
 }:
-with lib;
 let
+  inherit (lib)
+    mkEnableOption
+    mkIf
+    ;
   cfg = config.modules.gaming;
 in
 {

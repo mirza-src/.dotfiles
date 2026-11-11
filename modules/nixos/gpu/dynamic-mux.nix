@@ -5,8 +5,14 @@
   inputs,
   ...
 }:
-with lib;
 let
+  inherit (lib)
+    mkEnableOption
+    mkForce
+    mkIf
+    mkOption
+    types
+    ;
   cfg = config.modules.gpu.dynamic-mux;
 in
 # Live internal-panel switching between iGPU and dGPU ("Ultimate" without a

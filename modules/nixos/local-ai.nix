@@ -5,9 +5,15 @@
   ...
 }:
 
-with lib;
-
 let
+  inherit (lib)
+    elem
+    head
+    mkEnableOption
+    mkIf
+    mkOption
+    types
+    ;
   cfg = config.modules.local-ai;
 in
 {

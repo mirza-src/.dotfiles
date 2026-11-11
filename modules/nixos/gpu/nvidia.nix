@@ -4,8 +4,12 @@
   config,
   ...
 }:
-with lib;
 let
+  inherit (lib)
+    mkEnableOption
+    mkIf
+    optional
+    ;
   cfg = config.modules.gpu.nvidia;
   nvidiaVulkanIcd = "${config.hardware.nvidia.package}/share/vulkan/icd.d/nvidia_icd.json";
 in

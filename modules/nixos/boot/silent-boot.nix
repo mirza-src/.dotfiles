@@ -1,6 +1,9 @@
 { lib, config, ... }:
-with lib;
 let
+  inherit (lib)
+    mkEnableOption
+    mkIf
+    ;
   cfg = config.modules.silent-boot;
 in
 {

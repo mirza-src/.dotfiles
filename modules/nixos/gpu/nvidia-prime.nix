@@ -4,8 +4,14 @@
   config,
   ...
 }:
-with lib;
 let
+  inherit (lib)
+    mkEnableOption
+    mkIf
+    mkMerge
+    mkOption
+    types
+    ;
   cfg = config.modules.gpu.nvidia-prime;
 in
 {
