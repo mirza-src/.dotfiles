@@ -61,10 +61,6 @@ rec {
       url = "github:GunduLabs/gaze";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    microvm = {
-      url = "github:microvm-nix/microvm.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     giantswarm = {
       url = "github:giantswarm/nix-gs";
       inputs.nixpkgs.follows = "nixpkgs";
