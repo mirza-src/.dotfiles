@@ -205,5 +205,6 @@
     "mango": {
       "cursorHideTimeout": 0
     }
-  }
+  },
+  "displayPreviousRefreshModes": {}
 }
