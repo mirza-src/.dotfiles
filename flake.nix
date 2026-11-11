@@ -101,6 +101,7 @@ rec {
       self,
       nixpkgs,
       home-manager,
+      nix-darwin,
       devenv,
       ...
     }@inputs:
@@ -260,6 +261,26 @@ rec {
         }
       );
 
+      # nix-darwin configuration entrypoint
+      # Available through 'darwin-rebuild switch --flake .#hostname'
+      darwinConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts/darwin) (
+        hostname:
+        nix-darwin.lib.darwinSystem {
+          specialArgs = {
+            inherit
+              self
+              inputs
+              hostname
+              nixConfig
+              ;
+          };
+          modules = [
+            self.darwinModules.default
+            ./hosts/darwin/${hostname}
+          ];
+        }
+      );
+
       overlays.default = (import ./overlay.nix) inputs;
 
       lib = import ./lib {
@@ -272,6 +293,7 @@ rec {
         inherit (nixpkgs) lib;
       };
       nixosModules = self.modules.nixos;
+      darwinModules = self.modules.darwin;
       homeManagerModules = self.modules.home-manager;
 
       templates =
