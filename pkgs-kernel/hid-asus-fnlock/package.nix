@@ -21,10 +21,16 @@ stdenv.mkDerivation {
     "INSTALL_MOD_DIR=updates"
   ];
 
-  # kernel.src is the already-patched source tree; copy just what we need.
+  # kernel.src is a source tree for some kernels (e.g. CachyOS, already
+  # patched) and a tarball for others (mainline); extract just what we need.
   unpackPhase = ''
-    mkdir -p drivers/hid
-    cp $src/drivers/hid/{hid-asus.c,hid-ids.h} drivers/hid/
+    files="drivers/hid/hid-asus.c drivers/hid/hid-ids.h"
+    if [ -d "$src" ]; then
+      mkdir -p drivers/hid
+      for f in $files; do cp "$src/$f" drivers/hid/; done
+    else
+      tar -xf "$src" --strip-components=1 --wildcards $(printf '*/%s ' $files)
+    fi
     chmod -R u+w drivers
   '';
 
