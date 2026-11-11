@@ -14,7 +14,7 @@ in
   config = lib.mkIf cfg.enable {
     boot.supportedFilesystems = [ "ntfs" ];
 
-    # Keep /boot (1 GB ESP) from filling up; specialisations add entries too.
+    # Keep /boot (1 GB ESP) from filling up.
     boot.loader.systemd-boot.configurationLimit = lib.mkDefault 5;
 
     # nh: nicer rebuilds (`nh os switch`, `nh home switch`) and a weekly

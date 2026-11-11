@@ -103,13 +103,9 @@ in
       extraPackages = with pkgs; [ nvidia-vaapi-driver ];
     };
 
-    hardware.nvidia.primeBatterySaverSpecialisation = true;
+    # No primeBatterySaverSpecialisation: cardwired switches the dGPU off on
+    # battery, and the specialisation doubled evaluation time and boot entries.
     hardware.nvidia-container-toolkit.enable = lib.mkDefault true;
-    specialisation = lib.mkIf config.hardware.nvidia.primeBatterySaverSpecialisation {
-      battery-saver.configuration = {
-        hardware.nvidia-container-toolkit.enable = lib.mkForce false;
-      };
-    };
     virtualisation.vmVariant = {
       hardware.nvidia-container-toolkit.enable = false;
     };
