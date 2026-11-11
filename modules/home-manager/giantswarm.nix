@@ -2,6 +2,7 @@
   lib,
   pkgs,
   config,
+  inputs,
   ...
 }:
 with lib;
@@ -14,6 +15,8 @@ in
   };
 
   config = mkIf cfg.enable {
+    nixpkgs.overlays = [ inputs.giantswarm.overlay ];
+
     home.packages = (
       with pkgs;
       [
@@ -39,20 +42,19 @@ in
         (_1password-gui.override {
           polkitPolicyOwners = [ config.home.username ];
         })
+
+        # From nix-gs (inputs.giantswarm.overlay)
+        architect
         devctl
+        kubectl-gs
+        opsctl
       ]
       ++ (with giantswarm; [
-        gg
-        kubectl-gs
-        luigi
-        opsctl
-        gsctl
-        nancy-fixer
-        architect
-
         helm-values-gen
-        schemalint
+        luigi
+        nancy-fixer
         schemadocs
+        schemalint
       ])
     );
 
