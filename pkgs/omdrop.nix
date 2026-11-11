@@ -88,6 +88,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   buildInputs = [ pythonEnv ];
 
+  # Upstream receiver fix (0.16.2): store an upload whose closing chunk never
+  # comes, instead of timing out with 408. Larger files from a Mac need it.
+  patches = [ ./omdrop-receiver-closing-chunk.patch ];
+
   dontBuild = true;
 
   # Keep the upstream plugin layout: $out/manifest.json, $out/bin/omdrop next
