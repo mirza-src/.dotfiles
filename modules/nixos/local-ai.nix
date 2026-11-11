@@ -67,24 +67,18 @@ in
         assertion = cfg.taskModel == null || elem cfg.taskModel cfg.models;
         message = "modules.local-ai.taskModel must be one of modules.local-ai.models.";
       }
+      {
+        assertion = cfg.gpuAcceleration != "cuda" || config.modules.gpu.nvidia.enable;
+        message = "modules.local-ai.gpuAcceleration = \"cuda\" needs modules.gpu.nvidia.enable.";
+      }
+      {
+        assertion = cfg.gpuAcceleration != "rocm" || config.modules.gpu.amd.enable;
+        message = "modules.local-ai.gpuAcceleration = \"rocm\" needs modules.gpu.amd.enable.";
+      }
     ];
 
-    nixpkgs.config.allowUnfree = mkIf (cfg.gpuAcceleration == "cuda") true;
-
-    hardware.graphics = {
-      enable = true;
-      enable32Bit = true;
-    };
-
-    services.xserver.videoDrivers = mkIf (cfg.gpuAcceleration == "cuda") [ "nvidia" ];
-
-    hardware.nvidia = mkIf (cfg.gpuAcceleration == "cuda") {
-      modesetting.enable = true;
-      powerManagement.enable = true;
-      powerManagement.finegrained = true;
-      open = true;
-    };
-
+    # Drivers come from the GPU modules (modules.gpu.*); this only runs the
+    # inference stack on top of them.
     services.ollama = {
       enable = true;
       package = pkgs.${"ollama-${cfg.gpuAcceleration}"};
