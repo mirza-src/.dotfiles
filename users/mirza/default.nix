@@ -189,7 +189,6 @@
     moodle-dl
 
     # (azure-cli.withExtensions [ azure-cli.extensions.ssh ])
-    kubelogin
     ansible
   ];
 
