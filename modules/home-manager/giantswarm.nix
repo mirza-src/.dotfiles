@@ -35,8 +35,6 @@ in
         kube-linter
         pre-commit
         helm-docs
-        # kubernetes-helm
-        (pkgs.wrapHelm pkgs.kubernetes-helm { plugins = with kubernetes-helmPlugins; [ helm-schema ]; })
 
         _1password-cli
         (_1password-gui.override {
@@ -57,6 +55,10 @@ in
         schemalint
       ])
     );
+
+    # helm itself comes from the kubernetes module, wrapped with this plugin.
+    modules.kubernetes.enable = true;
+    modules.kubernetes.helmPlugins = [ pkgs.kubernetes-helmPlugins.helm-schema ];
 
     programs.ssh-agent-switch.agents."1password" = "${config.home.homeDirectory}/.1password/agent.sock";
   };

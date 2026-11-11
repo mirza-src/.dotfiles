@@ -11,6 +11,13 @@ in
 {
   options.modules.kubernetes = {
     enable = mkEnableOption "Enable Kubernetes tools";
+
+    helmPlugins = mkOption {
+      type = types.listOf types.package;
+      default = [ ];
+      example = literalExpression "[ pkgs.kubernetes-helmPlugins.helm-diff ]";
+      description = "Helm plugins to wrap the helm binary with.";
+    };
   };
 
   config = mkIf cfg.enable {
@@ -19,7 +26,7 @@ in
       kubectx
       kubelogin
       kubelogin-oidc
-      kubernetes-helm
+      (if cfg.helmPlugins == [ ] then kubernetes-helm else wrapHelm kubernetes-helm { plugins = cfg.helmPlugins; })
       stern
       helmfile
       kubetail
