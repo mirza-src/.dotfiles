@@ -1,7 +1,6 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
     devenv = {
       url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -18,14 +17,21 @@
     {
       self,
       nixpkgs,
-      flake-utils,
       devenv,
       ...
     }@inputs:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = import nixpkgs {
+    let
+      inherit (nixpkgs) lib;
+
+      forAllSystems = lib.genAttrs [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
+
+      pkgsFor = forAllSystems (
+        system:
+        import nixpkgs {
           inherit system;
           config.allowUnfree = true;
 
@@ -33,11 +39,17 @@
           overlays = [
             self.overlays.default
           ];
-        };
-      in
-      {
-        # Add outputs that depend on system here, e.g. devShells, packages, apps, etc.
-        devShells = {
+        }
+      );
+    in
+    {
+      # Add outputs that depend on system here, e.g. devShells, packages, apps, etc.
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor.${system};
+        in
+        {
           default = devenv.lib.mkShell {
             inherit inputs pkgs;
             modules = [
@@ -55,10 +67,9 @@
               }
             ];
           };
-        };
-      }
-    )
-    // {
+        }
+      );
+
       # Add outputs that do not depend on system here, e.g. overlays, templates, etc.
       overlays = {
         default = final: prev: {

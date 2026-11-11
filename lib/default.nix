@@ -1,5 +1,26 @@
 { lib, ... }:
 rec {
+  # Flatten nested package sets into one level of derivations, joining the
+  # names with "-": { a = drv; b.c = drv; } -> { a = drv; b-c = drv; }
+  flattenPackages =
+    let
+      go =
+        prefix:
+        lib.concatMapAttrs (
+          name: value:
+          let
+            path = if prefix == null then name else "${prefix}-${name}";
+          in
+          if lib.isDerivation value then
+            { ${path} = value; }
+          else if lib.isAttrs value then
+            go path value
+          else
+            { }
+        );
+    in
+    go null;
+
   listNixModules =
     dir:
     lib.pipe (builtins.readDir dir) [

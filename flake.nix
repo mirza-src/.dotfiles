@@ -1,18 +1,20 @@
 rec {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
-    cachyos-kernel.url = "github:xddxdd/nix-cachyos-kernel/release";
+    devenv = {
+      url = "github:cachix/devenv";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    cachyos-kernel = {
+      # Deliberately keeps its own nixpkgs, so its kernels hit cache.lantian.pub
+      url = "github:xddxdd/nix-cachyos-kernel/release";
+    };
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     home-manager = {
       url = "github:nix-community/home-manager";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-    devenv = {
-      url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     lanzaboote = {
@@ -80,7 +82,7 @@ rec {
       "lantian:WVGO7vsRMSEN+h7Lp7kv6SAmrkEXgUGbbXm7jMDjBuQ="
       "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
       "cache.nixos-cuda.org:74DUi4Ye579gUqzH4ziL9IyiJBlDpMRn9MBN8oNan9M="
-      "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs= "
+      "flox-cache-public-1:7F4OyH7ZCnFhcze3fJdfyXYLQw/aV7GEed86nQ7IsOs="
       "devenv.cachix.org-1:w1cLUi8dv3hnoSPGAuibQv+f9TZLr6cv/Hm9XgU50cw="
       "nix-gaming.cachix.org-1:nbjlureqMbRAxR1gJ/f3hxemL9svXaZF/Ees8vCUUs4="
     ];
@@ -90,53 +92,66 @@ rec {
     {
       self,
       nixpkgs,
-      flake-utils,
       home-manager,
       devenv,
-      mangowm,
-      vscode-extensions,
-      giantswarm,
       ...
     }@inputs:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = import nixpkgs {
+    let
+      inherit (nixpkgs) lib;
+
+      systems = [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
+      forAllSystems = lib.genAttrs systems;
+
+      # Only for building this flake's own packages (some are unfree); NixOS
+      # and home-manager configure their own nixpkgs in modules.
+      pkgsFor = forAllSystems (
+        system:
+        import nixpkgs {
           inherit system;
           config.allowUnfree = true;
-          config.cudaSupport = nixpkgs.lib.hasSuffix "-linux" system; # no CUDA on macOS
-          # Adding an overlay to allow access to all packages through nixpkgs
-          overlays = [
-            giantswarm.overlay
-            vscode-extensions.overlays.default
-            mangowm.overlays.default
-            self.overlays.default
-          ];
-        };
+        }
+      );
 
-        # packagesFromDirectoryRecursive includes functions like callPackage
-        localPackages = nixpkgs.lib.packagesFromDirectoryRecursive {
+      # packagesFromDirectoryRecursive includes functions like callPackage
+      # Local packages, nested as in the directory tree
+      localPackagesFor = forAllSystems (
+        system:
+        let
+          pkgs = pkgsFor.${system};
+        in
+        lib.packagesFromDirectoryRecursive {
           inherit (pkgs) callPackage newScope;
           directory = ./pkgs;
-        };
-      in
-      {
-        # Only direct derivations should be exposed through 'packages'
-        packages =
-          nixpkgs.lib.filterAttrs (_: pkg: nixpkgs.lib.isDerivation pkg) localPackages
-          # Kernel modules only make sense against a specific kernel, so take
-          # them from the host that uses them.
-          // nixpkgs.lib.optionalAttrs (system == "x86_64-linux") {
-            inherit (self.nixosConfigurations.zephyrus.config.boot.kernelPackages) hid-asus-fnlock;
+        }
+        // lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
+          # Kernel modules from ./pkgs-kernel, under linuxPackages like in
+          # nixpkgs. Built against the latest mainline kernel here; hosts
+          # build them against their own kernel (see overlay.nix).
+          linuxPackages = lib.packagesFromDirectoryRecursive {
+            inherit (pkgs.linuxPackages_latest) callPackage;
+            directory = ./pkgs-kernel;
           };
+        }
+      );
+    in
+    {
+      # 'packages' must be flat: nested sets become e.g. giantswarm-gg
+      packages = forAllSystems (system: self.lib.flattenPackages localPackagesFor.${system});
 
-        legacyPackages = localPackages // {
+      legacyPackages = forAllSystems (
+        system:
+        localPackagesFor.${system}
+        // {
           # Standalone home-manager configuration entrypoint
           # Available through 'home-manager switch --flake .#username'
-          homeConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./users) (
+          homeConfigurations = lib.genAttrs (self.lib.listNixModules ./users) (
             username:
             home-manager.lib.homeManagerConfiguration {
-              inherit pkgs; # Home-manager requires 'pkgs' instance
+              pkgs = nixpkgs.legacyPackages.${system}; # Home-manager requires 'pkgs' instance
               extraSpecialArgs = {
                 inherit self inputs username;
               };
@@ -146,30 +161,37 @@ rec {
               ];
             }
           );
-        };
+        }
+      );
 
-        devShells.default = devenv.lib.mkShell {
-          inherit inputs pkgs;
-          modules = [
-            {
-              # HACK: To allow pure evaluation
-              devenv.root =
-                let
-                  devenvRootFileContent = builtins.readFile inputs.devenv-root.outPath;
-                in
-                pkgs.lib.mkIf (devenvRootFileContent != "") devenvRootFileContent;
-            }
-            {
-              name = "dotfiles";
+      devShells = forAllSystems (
+        system:
+        let
+          pkgs = nixpkgs.legacyPackages.${system};
+        in
+        {
+          default = devenv.lib.mkShell {
+            inherit inputs pkgs;
+            modules = [
+              {
+                # HACK: To allow pure evaluation
+                devenv.root =
+                  let
+                    devenvRootFileContent = builtins.readFile inputs.devenv-root.outPath;
+                  in
+                  lib.mkIf (devenvRootFileContent != "") devenvRootFileContent;
+              }
+              {
+                name = "dotfiles";
 
-              # https://devenv.sh/reference/options/
-              # packages = with pkgs; [ ];
-            }
-          ];
-        };
-      }
-    )
-    // {
+                # https://devenv.sh/reference/options/
+                # packages = with pkgs; [ ];
+              }
+            ];
+          };
+        }
+      );
+
       # NixOS configuration entrypoint
       # Available through 'nixos-rebuild switch --flake .#hostname'
       nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts) (
