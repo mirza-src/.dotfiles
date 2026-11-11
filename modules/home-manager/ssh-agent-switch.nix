@@ -42,10 +42,22 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    ## Single stable socket for everything (systemd: Linux only; the shell
-    ## initialization below covers macOS)
+    ## Single stable socket for everything: shells (initialization below) and
+    ## GUI apps (systemd session on Linux, launchd on macOS)
     systemd.user.sessionVariables = lib.mkIf pkgs.stdenv.hostPlatform.isLinux {
       SSH_AUTH_SOCK = ssh-socket-path;
+    };
+    launchd.agents.ssh-auth-sock = lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
+      enable = true;
+      config = {
+        ProgramArguments = [
+          "/bin/launchctl"
+          "setenv"
+          "SSH_AUTH_SOCK"
+          ssh-socket-path
+        ];
+        RunAtLoad = true;
+      };
     };
     sshAuthSock.initialization = {
       bash = lib.mkForce ''export SSH_AUTH_SOCK="${ssh-socket-path}"'';
