@@ -19,7 +19,7 @@
 
   # nix-darwin release of the first install; see `darwin-rebuild changelog`
   # before changing.
-  system.stateVersion = 6;
+  system.stateVersion = 7;
 
   modules.defaults = {
     enable = true;
