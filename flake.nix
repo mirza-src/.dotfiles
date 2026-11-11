@@ -202,7 +202,7 @@ rec {
                 cd ${self}
                 statix check --config ${./statix.toml} .
                 # Lambda args (overlay/callPackage signatures) are often unused on purpose.
-                deadnix --fail --no-lambda-arg --exclude hosts/zephyrus/hardware-configuration.nix .
+                deadnix --fail --no-lambda-arg --exclude hosts/nixos/zephyrus/hardware-configuration.nix .
                 touch $out
               '';
         }
@@ -238,7 +238,7 @@ rec {
 
       # NixOS configuration entrypoint
       # Available through 'nixos-rebuild switch --flake .#hostname'
-      nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts) (
+      nixosConfigurations = nixpkgs.lib.genAttrs (self.lib.listNixModules ./hosts/nixos) (
         hostname:
         nixpkgs.lib.nixosSystem {
           specialArgs = {
@@ -251,7 +251,7 @@ rec {
           };
           modules = [
             self.nixosModules.default
-            ./hosts/${hostname}
+            ./hosts/nixos/${hostname}
           ];
         }
       );
