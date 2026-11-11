@@ -13,6 +13,10 @@
     ./darwin.nix
   ];
 
+  # Home Manager release of the first activation; don't bump without reading
+  # the Home Manager release notes.
+  home.stateVersion = "26.05";
+
   modules.defaults.enable = true;
   modules.giantswarm.enable = true;
   modules.kubernetes.enable = true;
