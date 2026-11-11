@@ -8,6 +8,8 @@ rec {
     cachyos-kernel = {
       # Deliberately keeps its own nixpkgs, so its kernels hit cache.lantian.pub
       url = "github:xddxdd/nix-cachyos-kernel/release";
+      inputs.flake-parts.follows = "devenv/flake-parts";
+      inputs.flake-compat.follows = "devenv/flake-compat";
     };
     nixos-hardware = {
       url = "github:NixOS/nixos-hardware";
@@ -18,12 +20,14 @@ rec {
       inputs.nixpkgs.follows = "nixpkgs";
     };
     lanzaboote = {
-      url = "github:nix-community/lanzaboote/v0.4.2";
+      url = "github:nix-community/lanzaboote/v1.2.0";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.pre-commit.follows = "devenv/git-hooks";
     };
     mangowm = {
       url = "github:mangowm/mango";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-parts.follows = "devenv/flake-parts";
     };
     vscode-extensions = {
       url = "github:nix-community/nix-vscode-extensions";
@@ -32,10 +36,14 @@ rec {
     nix-gaming = {
       url = "github:fufexan/nix-gaming";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-parts.follows = "devenv/flake-parts";
+      inputs.flake-compat.follows = "devenv/flake-compat";
+      inputs.git-hooks.follows = "devenv/git-hooks";
     };
     dank-material-shell = {
       url = "github:AvengeMedia/DankMaterialShell";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-compat.follows = "devenv/flake-compat";
     };
     dank-greeter = {
       url = "github:AvengeMedia/dank-greeter";
