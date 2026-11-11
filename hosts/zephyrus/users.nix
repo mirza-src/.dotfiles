@@ -25,7 +25,6 @@
         "input"
         "audio"
         "video"
-        "disk"
         "incus-admin"
         "libvirtd"
       ];
