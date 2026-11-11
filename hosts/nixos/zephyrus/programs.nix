@@ -1,15 +1,6 @@
 { pkgs, ... }:
 {
-  fonts.packages = with pkgs; [
-    font-awesome
-    noto-fonts-color-emoji
-    meslo-lgs-nf
-    # Only the Nerd Fonts in use (all of them is several GB). symbols-only
-    # gives every other font the Nerd Font icons as a fallback.
-    nerd-fonts.fira-code
-    nerd-fonts.jetbrains-mono
-    nerd-fonts.symbols-only
-  ];
+  modules.fonts.enable = true;
 
   programs.git.enable = true;
   programs.vim.enable = true;

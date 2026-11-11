@@ -13,11 +13,8 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
     libreoffice-bin
     vlc-bin
     ghostty-bin
-
-    # Editor font (Zed, VS Code). Linux gets it from the host's font packages;
-    # home-manager installs it into ~/Library/Fonts here.
-    nerd-fonts.fira-code
   ];
+  # Fonts come from the host on both platforms (modules.fonts).
 
   # VS Code keeps its settings under ~/Library/Application Support on macOS;
   # same files as Linux's ~/.config/Code, linked writable.
@@ -25,7 +22,8 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
     "Library/Application Support/Code/User/settings.json".source =
       config.lib.dotfiles.mkMutableSymlink ./.config/Code/User/settings.json;
     "Library/Application Support/Code - Insiders/User/settings.json".source =
-      config.lib.dotfiles.mkMutableSymlink (./.config + "/Code - Insiders/User/settings.json");
+      config.lib.dotfiles.mkMutableSymlink
+        (./.config + "/Code - Insiders/User/settings.json");
   };
 
   # Not available on macOS: veracrypt, protonplus, rocketchat-desktop,
