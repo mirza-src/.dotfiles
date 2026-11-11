@@ -36,10 +36,7 @@ in
         pre-commit
         helm-docs
 
-        _1password-cli
-        (_1password-gui.override {
-          polkitPolicyOwners = [ config.home.username ];
-        })
+        # 1Password itself comes from the host (modules.onepassword).
 
         # From nix-gs (its overlay is applied in flake.nix)
         architect
@@ -59,6 +56,10 @@ in
     modules.kubernetes.enable = true;
     modules.kubernetes.helmPlugins = [ pkgs.kubernetes-helmPlugins.helm-schema ];
 
-    programs.ssh-agent-switch.agents."1password" = "${config.home.homeDirectory}/.1password/agent.sock";
+    programs.ssh-agent-switch.agents."1password" =
+      if pkgs.stdenv.hostPlatform.isDarwin then
+        "${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
+      else
+        "${config.home.homeDirectory}/.1password/agent.sock";
   };
 }

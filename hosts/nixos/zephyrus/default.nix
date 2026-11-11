@@ -61,6 +61,7 @@
   # Experimental: live panel switching between iGPU and dGPU (cardwire
   # "ultimate" mode), see modules/nixos/gpu/dynamic-mux.nix.
   modules.gpu.dynamic-mux.enable = true;
+  modules.onepassword.enable = true;
   modules.gaming.enable = true;
   modules.power.enable = true;
   modules.local-ai.enable = true;
