@@ -75,12 +75,28 @@ fi
 sed -n 's/^trace: unfree: //p' "$tmp/eval" | sort -u > "$tmp/unfree"
 group "Unfree packages (never pushed)"; cat "$tmp/unfree"; endgroup
 
-# Private sources (fetchFromGitHub { private = true; }, e.g. opsctl's: their
-# .drv names the NIX_GITHUB_PRIVATE_* credentials they fetch with) and every
-# derivation built from them: CI can't fetch them, and what's built from them
-# must not land in a public cache.
+# Private sources (fetchFromGitHub { private = true; }, e.g. opsctl's: they
+# fetch with the NIX_GITHUB_PRIVATE_* credentials, passed in impureEnvVars)
+# and every derivation built from them: CI can't fetch them, and what's built
+# from them must not land in a public cache. Grep finds the candidates
+# cheaply; the attribute check skips derivations merely mentioning the names
+# (like this script's own).
 nix-store --query --requisites "${drvs[@]}" | grep '\.drv$' \
-  | xargs grep -l NIX_GITHUB_PRIVATE > "$tmp/private-src" || true
+  | xargs grep -l NIX_GITHUB_PRIVATE > "$tmp/private-candidates" || true
+: > "$tmp/private-src"
+if [[ -s $tmp/private-candidates ]]; then
+  xargs nix derivation show < "$tmp/private-candidates" | jq -r '
+    def attr($n):
+      if .structuredAttrs then .structuredAttrs[$n]
+      elif .env.__json then (.env.__json | fromjson)[$n]
+      else .env[$n] end;
+    (.derivations // .) | to_entries[]
+    | select(.value | attr("impureEnvVars")
+        | (if type == "array" then join(" ") else . // "" end)
+        | test("NIX_GITHUB_PRIVATE_USERNAME"))
+    | .key | if startswith("/") then . else "/nix/store/" + . end
+  ' > "$tmp/private-src"
+fi
 if [[ -s $tmp/private-src ]]; then
   nix-store --query --referrers-closure $(<"$tmp/private-src") > "$tmp/private"
 else
@@ -97,36 +113,62 @@ if $build; then
   fi
   missing=$(awk '/will be built:$/ { b = 1; next } /^[^ ]/ { b = 0 } b { print $1 }' <<<"$out")
 
-  # Leave out:
-  # - unfree packages
-  # - private sources and what's built from them
-  # - downloads (fixed-output): nothing to gain over fetching upstream
-  # - those meant to be built locally (allowSubstitutes = false or
-  #   preferLocalBuild: config files, symlink farms like system-path and
-  #   home-manager-path, the generations): cheap, and building them would
-  #   download (or build) the whole closure
   todo=()
   if [[ -n $missing ]]; then
-    todo=($(nix derivation show $missing | jq -r --rawfile unfree "$tmp/unfree" --rawfile private "$tmp/private" '
-      def set: split("\n") | map({(.): true}) | add // {};
+    nix derivation show $missing | jq '
+      (.derivations // .)
+      | with_entries(.key |= if startswith("/") then . else "/nix/store/" + . end)
+    ' > "$tmp/missing.json"
+
+    # Never build, nor anything that needs them (building that would build
+    # them too):
+    # - unfree packages, and their parts named after them (-unwrapped,
+    #   -extracted, ...): what's built from them refers to them, so it can't
+    #   be pushed either (nvidia-settings to nvidia-x11, the 1Password
+    #   security wrapper to 1password)
+    # - FHS environments' root filesystems (buildFHSEnv): symlink farms;
+    #   building one downloads gigabytes (steam's 32-bit libraries) and
+    #   compiles nothing
+    # - private sources (above)
+    jq -r --rawfile unfree "$tmp/unfree" '
+      ($unfree | split("\n") | map(select(. != ""))) as $unfree
+      | to_entries[]
+      | select(.value.name as $n
+          | any($unfree[]; . as $u | $n == $u or ($n | startswith($u + "-")))
+            or ($n | endswith("-fhsenv-rootfs")))
+      | .key
+    ' "$tmp/missing.json" > "$tmp/skip-src"
+    if [[ -s $tmp/skip-src ]]; then
+      nix-store --query --referrers-closure $(<"$tmp/skip-src") > "$tmp/skip"
+    else
+      : > "$tmp/skip"
+    fi
+    cat "$tmp/private" >> "$tmp/skip"
+
+    # Also leave out:
+    # - downloads (fixed-output): nothing to gain over fetching upstream
+    # - those meant to be built locally (allowSubstitutes = false or
+    #   preferLocalBuild: config files, symlink farms like system-path and
+    #   home-manager-path, the generations): cheap, and building them would
+    #   download (or build) the whole closure
+    todo=($(jq -r --rawfile skip "$tmp/skip" '
+      ($skip | split("\n") | map({(.): true}) | add // {}) as $skip
       # A derivation attribute: in structuredAttrs (or the older env.__json)
       # for derivations using structured attrs, else in env as a string
       # (true: "1", false: "")
-      def attr($n):
-        if .structuredAttrs then .structuredAttrs[$n]
-        elif .env.__json then (.env.__json | fromjson)[$n]
-        else .env[$n] end;
-      def local:
-        (attr("allowSubstitutes") | . == false or . == "")
-        or (attr("preferLocalBuild") | . == true or . == "1");
-      ($unfree | set) as $unfree | ($private | set) as $private
-      | (.derivations // .) | to_entries[]
-      | .key |= (if startswith("/") then . else "/nix/store/" + . end)
+      | def attr($n):
+          if .structuredAttrs then .structuredAttrs[$n]
+          elif .env.__json then (.env.__json | fromjson)[$n]
+          else .env[$n] end;
+        def local:
+          (attr("allowSubstitutes") | . == false or . == "")
+          or (attr("preferLocalBuild") | . == true or . == "1");
+        to_entries[]
       | select((.value | local | not)
           and all(.value.outputs[]; .hash == null)
-          and ($unfree[.value.name] | not)
-          and ($private[.key] | not))
-      | .key'))
+          and ($skip[.key] | not))
+      | .key
+    ' "$tmp/missing.json"))
   fi
   if (( ${#todo[@]} == 0 )); then
     echo "Nothing to build"
@@ -154,7 +196,7 @@ excluded=$(jq -r --rawfile u "$tmp/unfree" --rawfile p "$tmp/private" '
   ($u | split("\n") | map(select(. != ""))) as $u
   | ($p | split("\n") | map({(.): true}) | add // {}) as $p
   | to_entries[]
-  | select((.key[44:] as $n | any($u[]; $n == . or ($n | startswith(. + "-"))))
+  | select((.key[44:] as $n | any($u[]; . as $x | $n == $x or ($n | startswith($x + "-"))))
       or (.value.deriver // ""
           | if . == "" or startswith("/") then . else "/nix/store/" + . end
           | $p[.]))
