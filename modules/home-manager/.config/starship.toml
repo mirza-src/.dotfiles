@@ -1,10 +1,19 @@
 # Get editor completions based on the config schema
 "$schema" = 'https://starship.rs/config-schema.json'
 
-format = '$all'
+format = '${custom.hm_profile}$all'
 
 [kubernetes]
 disabled = false
 
 [azure]
 disabled = false
+
+# Active home-manager specialisation (work, study, ...), from the file each one
+# writes (users/mirza/default.nix); hidden on the base home, which has none.
+[custom.hm_profile]
+when = 'test -s "${XDG_DATA_HOME:-$HOME/.local/share}/home-manager/profile"'
+command = 'cat "${XDG_DATA_HOME:-$HOME/.local/share}/home-manager/profile"'
+shell = ['sh']
+symbol = "\U000F02DC "                                                       # nf-md-home_variant
+format = '[$symbol$output]($style) '

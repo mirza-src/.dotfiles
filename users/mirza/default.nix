@@ -18,7 +18,6 @@
   home.stateVersion = "26.11";
 
   modules.defaults.enable = true;
-  modules.giantswarm.enable = true;
   modules.kubernetes.enable = true;
   modules.vpn.enable = true;
   modules.shell.enable = true; # zsh, tmux, neovim, direnv, fzf, starship
@@ -206,4 +205,20 @@
   home.file.".vscode/argv.json".source = config.lib.dotfiles.mkMutableSymlink ./.vscode/argv.json;
   home.file.".vscode-insiders/argv.json".source =
     config.lib.dotfiles.mkMutableSymlink ./.vscode/argv.json;
+
+  # Each specialisation writes its name to ~/.local/share/home-manager/profile,
+  # shown at the start of the starship prompt (custom.hm_profile). The base
+  # home has no such file, so nothing is shown there.
+  specialisation = {
+    study.configuration = {
+      xdg.dataFile."home-manager/profile".text = "study";
+      home.packages = with pkgs; [ met3d ];
+    };
+
+    work.configuration = {
+      xdg.dataFile."home-manager/profile".text = "work";
+      modules.giantswarm.enable = true;
+      programs.git.settings.user.email = lib.mkForce "mirza@giantswarm.io";
+    };
+  };
 }
