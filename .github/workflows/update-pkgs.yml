@@ -19,9 +19,9 @@ concurrency:
   group: update-pkgs
   cancel-in-progress: false
 
+# Pushes and PRs use secrets.GH_TOKEN instead
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   discover:
@@ -76,14 +76,26 @@ jobs:
             echo "::error::Refusing to downgrade $PKG from $old to $new"
             exit 1
           fi
-          echo "title=$(head -1 "$msg")" >> "$GITHUB_OUTPUT"
+          echo "title=chore(pkgs): update $PKG $old -> $new" >> "$GITHUB_OUTPUT"
 
+      # A token other than GITHUB_TOKEN, so the PR triggers the Check workflow.
+      # A rerun with a newer version updates the existing PR (title included).
       - if: steps.update.outputs.title
+        id: pr
         uses: peter-evans/create-pull-request@v8
         with:
+          token: ${{ secrets.GH_TOKEN }}
           branch: update/${{ matrix.package }}
           delete-branch: true
           commit-message: ${{ steps.update.outputs.title }}
           title: ${{ steps.update.outputs.title }}
           body: Automated `nix-update --flake ${{ matrix.package }}` run.
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+
+      # Squash-merges once the required checks (lint, eval, build) pass
+      - if: steps.pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          PR: ${{ steps.pr.outputs.pull-request-number }}
+          TITLE: ${{ steps.update.outputs.title }}
+        run: gh pr merge "$PR" --auto --squash --subject "$TITLE (#$PR)"

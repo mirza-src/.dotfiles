@@ -1,0 +1,105 @@
+name: Check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # statix + deadnix (checks.<system>.lint in flake.nix)
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - run: nix build --print-build-logs .#checks.x86_64-linux.lint
+
+  # Evaluate every host and home configuration on its own platform. Building
+  # them is too heavy for CI runners; evaluation catches broken options,
+  # renames and removed packages.
+  eval:
+    name: eval (${{ matrix.system }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, system: x86_64-linux, hosts: nixosConfigurations, toplevel: config.system.build.toplevel }
+          - { os: macos-latest, system: aarch64-darwin, hosts: darwinConfigurations, toplevel: system }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - env:
+          SYSTEM: ${{ matrix.system }}
+          HOSTS: ${{ matrix.hosts }}
+          TOPLEVEL: ${{ matrix.toplevel }}
+        run: |
+          failed=0
+          check() {
+            echo "::group::$1"
+            if nix eval --raw ".#$1.drvPath"; then echo; else
+              echo "::error::$1 failed to evaluate"
+              failed=1
+            fi
+            echo "::endgroup::"
+          }
+          names() { nix eval --json ".#$1" --apply builtins.attrNames | jq -r '.[]'; }
+
+          for host in $(names "$HOSTS"); do
+            check "$HOSTS.$host.$TOPLEVEL"
+          done
+          for user in $(names "legacyPackages.$SYSTEM.homeConfigurations"); do
+            check "legacyPackages.$SYSTEM.homeConfigurations.$user.activationPackage"
+          done
+          exit $failed
+
+  # Build the local packages whose derivation the PR changes, on each
+  # platform: the updated package on a package PR, everything on a
+  # flake.lock PR. Packages unavailable on a platform are skipped there.
+  build:
+    name: build (${{ matrix.system }})
+    if: github.event_name == 'pull_request'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, system: x86_64-linux }
+          - { os: macos-latest, system: aarch64-darwin }
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+        with:
+          # Use the substituters from flake.nix's nixConfig
+          extra_nix_config: accept-flake-config = true
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          drvs() {
+            nix eval --json "$1#packages.$SYSTEM" --apply '
+              builtins.mapAttrs (_: p:
+                let r = builtins.tryEval p.drvPath; in if r.success then r.value else null)'
+          }
+          base=$(drvs "git+file://$PWD?rev=$BASE")
+          head=$(drvs .)
+          # (no mapfile: macOS runners may have bash 3.2; names have no spaces)
+          changed=($(jq -rn --argjson b "$base" --argjson h "$head" \
+            '$h | to_entries[] | select(.value != null and .value != $b[.key]) | .key'))
+
+          if (( ${#changed[@]} == 0 )); then
+            echo "No package derivations changed"
+            exit 0
+          fi
+          printf 'Building: %s\n' "${changed[*]}"
+          nix build --keep-going --print-build-logs --no-link "${changed[@]/#/.#packages.$SYSTEM.}"

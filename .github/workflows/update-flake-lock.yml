@@ -1,0 +1,26 @@
+name: Update flake inputs
+
+# One PR bumping every flake input. Not auto-merged: Check only evaluates the
+# hosts, and a nixpkgs/kernel bump needs testing on the machines themselves.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays 05:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/update-flake-lock@v29
+        with:
+          # A token other than GITHUB_TOKEN, so the PR triggers the Check workflow
+          token: ${{ secrets.GH_TOKEN }}
+          branch: update/flake-lock
+          commit-msg: "chore(flake): update flake.lock"
+          pr-title: "chore(flake): update flake.lock"
