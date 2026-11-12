@@ -152,7 +152,7 @@ if $build; then
     #   home-manager-path, the generations): cheap, and building them would
     #   download (or build) the whole closure
     todo=($(jq -r --rawfile skip "$tmp/skip" '
-      ($skip | split("\n") | map({(.): true}) | add // {}) as $skip
+      ($skip | split("\n") | map(select(. != "") | {(.): true}) | add // {}) as $skip
       # A derivation attribute: in structuredAttrs (or the older env.__json)
       # for derivations using structured attrs, else in env as a string
       # (true: "1", false: "")
@@ -189,19 +189,25 @@ nix-store --query --requisites --include-outputs "${drvs[@]}" | grep -v '\.drv$'
   | nix path-info --json --stdin | jq "$normalize" > "$tmp/paths.json"
 
 # Paths never to push: unfree ones, by name (outputs other than out add a
-# suffix: -bin, -lib, ...; [44:] drops "/nix/store/<hash>-"), and those built
-# from private sources, by deriver. Cachix pushes a path's whole closure, so
-# everything referring to them stays out too.
-excluded=$(jq -r --rawfile u "$tmp/unfree" --rawfile p "$tmp/private" '
-  ($u | split("\n") | map(select(. != ""))) as $u
-  | ($p | split("\n") | map({(.): true}) | add // {}) as $p
-  | to_entries[]
-  | select((.key[44:] as $n | any($u[]; . as $x | $n == $x or ($n | startswith($x + "-"))))
-      or (.value.deriver // ""
-          | if . == "" or startswith("/") then . else "/nix/store/" + . end
-          | $p[.]))
-  | .key
-' "$tmp/paths.json")
+# suffix: -bin, -lib, ...; [44:] drops "/nix/store/<hash>-"), and the outputs
+# of derivations built from private sources. (Not by deriver: a path records
+# the .drv it was first built from, and an equivalent .drv, e.g. with its
+# source fetched differently, has another name but the same outputs.)
+# Cachix pushes a path's whole closure, so everything referring to them
+# stays out too.
+excluded=$(
+  jq -r --rawfile u "$tmp/unfree" '
+    ($u | split("\n") | map(select(. != ""))) as $u
+    | keys[]
+    | select(.[44:] as $n | any($u[]; . as $x | $n == $x or ($n | startswith($x + "-"))))
+  ' "$tmp/paths.json"
+  if [[ -s $tmp/private ]]; then
+    # Only those in the store: referrers-closure needs valid paths
+    nix-store --query --outputs $(<"$tmp/private") | while read -r p; do
+      if [[ -e $p ]]; then echo "$p"; fi
+    done
+  fi
+)
 if [[ -n $excluded ]]; then
   nix-store --query --referrers-closure $excluded > "$tmp/exclude"
 else
@@ -210,7 +216,7 @@ fi
 
 # Built here (ultimate: not downloaded), not a download or a copied source (ca)
 jq -r --rawfile ex "$tmp/exclude" '
-  ($ex | split("\n") | map({(.): true}) | add // {}) as $ex
+  ($ex | split("\n") | map(select(. != "") | {(.): true}) | add // {}) as $ex
   | to_entries[]
   | select(.value.ultimate == true and .value.ca == null)
   | .key | select($ex[.] | not)
