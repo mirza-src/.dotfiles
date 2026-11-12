@@ -14,5 +14,5 @@ buildGoModule (finalAttrs: {
     hash = "sha256-QEcQW1PRhNyD+BE0PZBTYcsSjkTNJsZTou6Povn94UU=";
   };
 
-  vendorHash = "sha256-FMNTbqdOl5UssPJERKyi0b2gCgGPAK98P5sjJpkS7ow=";
+  vendorHash = "sha256-n6BH5kQbL/r58p+EBEmIOsbzIrbsrH+uH0efc2B8kYk=";
 })
