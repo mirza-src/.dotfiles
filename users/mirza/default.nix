@@ -212,7 +212,8 @@
   specialisation = {
     study.configuration = {
       xdg.dataFile."home-manager/profile".text = "study";
-      home.packages = with pkgs; [ met3d ];
+      # met3d is Linux-only
+      home.packages = lib.optionals pkgs.stdenv.hostPlatform.isLinux [ pkgs.met3d ];
     };
 
     work.configuration = {
