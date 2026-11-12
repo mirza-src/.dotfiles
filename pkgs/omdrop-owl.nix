@@ -199,4 +199,8 @@ stdenv.mkDerivation (finalAttrs: {
     ];
     platforms = lib.platforms.linux;
   };
+
+  # Pinned: upstream became t4t5/owly (as of v0.4.3), dropping ./pins and the owl
+  # patches this package builds from; moving to it needs repackaging.
+  passthru.skipUpdate = true;
 })
