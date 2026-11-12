@@ -39,13 +39,13 @@ let
 in
 buildGoModule (finalAttrs: {
   pname = "cast-helper";
-  version = "0.1.0";
+  version = "0.2.0";
 
   src = fetchFromGitHub {
     owner = "Conava";
     repo = "dux-cast";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-hF7a2kQmkTm2YxS7LFvul8V5iS8FZ/fGlgLTypcEOz4=";
+    hash = "sha256-39pZjbktT/mFBesS089QnW01qefsQQAE4iHJb4wMeDg=";
   };
 
   vendorHash = "sha256-JdnJBwV2DHo/1EZ5v6bxC1JK/5PUIZeRmjroMnZrQoQ=";
