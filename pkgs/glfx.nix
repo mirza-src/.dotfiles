@@ -30,4 +30,7 @@ stdenv.mkDerivation {
     license = lib.licenses.bsd2;
     platforms = lib.platforms.unix;
   };
+
+  # Pinned to the commit in Met.3D's vcpkg overlay, not to upstream.
+  passthru.skipUpdate = true;
 }

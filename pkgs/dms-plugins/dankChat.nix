@@ -138,6 +138,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   passthru = {
+    # Pinned to the revision the dms-plugin-registry uses.
+    skipUpdate = true;
     inherit pythonEnv wacli;
   };
 

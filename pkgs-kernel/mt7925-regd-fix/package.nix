@@ -65,4 +65,7 @@ stdenv.mkDerivation {
     make $makeFlags M=$PWD modules_install
     runHook postInstall
   '';
+
+  # Built from the kernel's own source; nothing to update.
+  passthru.skipUpdate = true;
 }

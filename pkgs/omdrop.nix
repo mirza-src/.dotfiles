@@ -182,4 +182,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     mainProgram = "omdrop";
     platforms = lib.platforms.linux;
   };
+
+  # Pinned: dmsAirDrop refuses other omdrop versions.
+  passthru.skipUpdate = true;
 })

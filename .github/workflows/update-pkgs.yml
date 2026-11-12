@@ -1,0 +1,89 @@
+name: Update packages
+
+# Modelled on numtide/llm-agents.nix and nix-community/ethereum.nix: discover
+# every flake package with a version, run nix-update on each, and open one PR
+# per package (branch update/<name>, reused on later runs). Opt a package out
+# with `passthru.skipUpdate = true;`.
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: Packages to update (space-separated, empty for all)
+        required: false
+        default: ""
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+concurrency:
+  group: update-pkgs
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.discover.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+      - id: discover
+        env:
+          FILTER: ${{ inputs.packages }}
+        run: |
+          packages=$(nix eval --json .#packages.x86_64-linux --apply '
+            ps: builtins.filter
+              (n: ps.${n} ? version && !(ps.${n}.passthru.skipUpdate or false))
+              (builtins.attrNames ps)')
+          if [[ -n "$FILTER" ]]; then
+            packages=$(jq -c --arg f "$FILTER" '($f | split(" ") | map(select(. != ""))) as $w | map(select(IN($w[])))' <<<"$packages")
+          fi
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
+          jq -r '.[]' <<<"$packages"
+
+  update:
+    needs: discover
+    if: needs.discover.outputs.packages != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        package: ${{ fromJSON(needs.discover.outputs.packages) }}
+    env:
+      PKG: ${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: cachix/install-nix-action@v31
+
+      - name: Run nix-update
+        id: update
+        run: |
+          version() { nix eval --raw ".#packages.x86_64-linux.$PKG.version"; }
+          old=$(version)
+          msg="$RUNNER_TEMP/commit-msg"
+          nix run nixpkgs#nix-update -- --flake --write-commit-message "$msg" "$PKG"
+          [[ -f "$msg" ]] || { echo "$PKG is up to date"; exit 0; }
+
+          # nix-update takes the highest version upstream lists, which can be
+          # older than ours (e.g. GitHub omitting recent releases).
+          new=$(version)
+          if [[ $(nix eval --expr "builtins.compareVersions \"$new\" \"$old\"") == -1 ]]; then
+            echo "::error::Refusing to downgrade $PKG from $old to $new"
+            exit 1
+          fi
+          echo "title=$(head -1 "$msg")" >> "$GITHUB_OUTPUT"
+
+      - if: steps.update.outputs.title
+        uses: peter-evans/create-pull-request@v8
+        with:
+          branch: update/${{ matrix.package }}
+          delete-branch: true
+          commit-message: ${{ steps.update.outputs.title }}
+          title: ${{ steps.update.outputs.title }}
+          body: Automated `nix-update --flake ${{ matrix.package }}` run.
+          author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
