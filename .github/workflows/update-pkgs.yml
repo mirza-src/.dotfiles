@@ -59,6 +59,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: cachix/install-nix-action@v31
+        with:
+          # nix-update evaluates <nixpkgs> to run a passthru.updateScript
+          nix_path: nixpkgs=channel:nixos-unstable
 
       - name: Run nix-update
         id: update
@@ -66,7 +69,12 @@ jobs:
           version() { nix eval --raw ".#packages.x86_64-linux.$PKG.version"; }
           old=$(version)
           msg="$RUNNER_TEMP/commit-msg"
-          nix run nixpkgs#nix-update -- --flake --write-commit-message "$msg" "$PKG"
+          # Packages nix-update can't handle alone carry a passthru.updateScript
+          args=()
+          if [[ $(nix eval ".#packages.x86_64-linux.$PKG" --apply 'p: p ? updateScript') == true ]]; then
+            args+=(--use-update-script)
+          fi
+          nix run nixpkgs#nix-update -- --flake "${args[@]}" --write-commit-message "$msg" "$PKG"
           [[ -f "$msg" ]] || { echo "$PKG is up to date"; exit 0; }
 
           # nix-update takes the highest version upstream lists, which can be
