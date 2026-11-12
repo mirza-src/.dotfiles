@@ -61,12 +61,13 @@ jobs:
           done
           exit $failed
 
-  # Build the local packages whose derivation the PR changes, on each
-  # platform: the updated package on a package PR, everything on a
+  # Build the local packages whose derivation the PR (or push) changes, on
+  # each platform: the updated package on a package PR, everything on a
   # flake.lock PR. Packages unavailable on a platform are skipped there.
+  # No job-level `if`: a skipped matrix job reports one check with the
+  # unexpanded name "build (${{ matrix.system }})".
   build:
     name: build (${{ matrix.system }})
-    if: github.event_name == 'pull_request'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -83,9 +84,14 @@ jobs:
           # Use the substituters from flake.nix's nixConfig
           extra_nix_config: accept-flake-config = true
       - env:
-          BASE: ${{ github.event.pull_request.base.sha }}
+          # PR: its base; push: the previous tip; manual run: none
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           SYSTEM: ${{ matrix.system }}
         run: |
+          if [[ -z $BASE ]] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "No base commit to compare against, nothing to build"
+            exit 0
+          fi
           drvs() {
             nix eval --json "$1#packages.$SYSTEM" --apply '
               builtins.mapAttrs (_: p:
