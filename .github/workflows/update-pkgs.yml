@@ -58,33 +58,79 @@ jobs:
       PKG: ${{ matrix.package }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: cachix/install-nix-action@v31
         with:
           # nix-update evaluates <nixpkgs> to run a passthru.updateScript
           nix_path: nixpkgs=channel:nixos-unstable
 
+      # Updating the PR resets its branch, so leave alone a PR with fixes pushed
+      # by hand (non-merge commits not from the bot); it's yours to finish.
+      - name: Check for manual fixes
+        id: manual
+        run: |
+          git fetch -q origin "update/$PKG" 2>/dev/null || exit 0
+          authors=$(git log --no-merges --format=%ae "origin/main..FETCH_HEAD")
+          if [[ -n $authors ]] && grep -qv 'github-actions\[bot\]' <<<"$authors"; then
+            echo "::notice::update/$PKG has manual commits, leaving its PR alone"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run nix-update
         id: update
+        if: steps.manual.outputs.skip != 'true'
         run: |
-          version() { nix eval --raw ".#packages.x86_64-linux.$PKG.version"; }
+          version() { nix eval --raw ".#packages.x86_64-linux.$PKG.version" 2>/dev/null || echo unknown; }
           old=$(version)
-          msg="$RUNNER_TEMP/commit-msg"
+          log="$RUNNER_TEMP/nix-update.log"
           # Packages nix-update can't handle alone carry a passthru.updateScript
           args=()
           if [[ $(nix eval ".#packages.x86_64-linux.$PKG" --apply 'p: p ? updateScript') == true ]]; then
             args+=(--use-update-script)
           fi
-          nix run nixpkgs#nix-update -- --flake "${args[@]}" --write-commit-message "$msg" "$PKG"
-          [[ -f "$msg" ]] || { echo "$PKG is up to date"; exit 0; }
+          if nix run nixpkgs#nix-update -- --flake "${args[@]}" "$PKG" 2>&1 | tee "$log"; then
+            failed=false
+          else
+            failed=true
+          fi
+
+          if git diff --quiet; then
+            if [[ $failed == true ]]; then
+              echo "::error::nix-update failed for $PKG before changing anything"
+              exit 1
+            fi
+            echo "$PKG is up to date"
+            exit 0
+          fi
 
           # nix-update takes the highest version upstream lists, which can be
           # older than ours (e.g. GitHub omitting recent releases).
           new=$(version)
-          if [[ $(nix eval --expr "builtins.compareVersions \"$new\" \"$old\"") == -1 ]]; then
+          if [[ $new != unknown && $(nix eval --expr "builtins.compareVersions \"$new\" \"$old\"") == -1 ]]; then
             echo "::error::Refusing to downgrade $PKG from $old to $new"
             exit 1
           fi
-          echo "title=chore(pkgs): update $PKG $old -> $new" >> "$GITHUB_OUTPUT"
+
+          # nix-update stops partway on failure (e.g. the version is bumped but
+          # a dependency hash isn't), so the PR shows what needs fixing.
+          body="$RUNNER_TEMP/body.md"
+          if [[ $failed == true ]]; then
+            {
+              echo "nix-update failed for \`$PKG\`, so this update needs a manual fix: push it to this branch and mark the PR ready."
+              echo
+              echo '```'
+              tail -n 40 "$log"
+              echo '```'
+            } > "$body"
+          else
+            echo "Automated \`nix-update --flake $PKG\` run." > "$body"
+          fi
+          {
+            echo "title=chore(pkgs): update $PKG $old -> $new"
+            echo "failed=$failed"
+            echo "body=$body"
+          } >> "$GITHUB_OUTPUT"
 
       # A token other than GITHUB_TOKEN, so the PR triggers the Check workflow.
       # A rerun with a newer version updates the existing PR (title included).
@@ -97,13 +143,25 @@ jobs:
           delete-branch: true
           commit-message: ${{ steps.update.outputs.title }}
           title: ${{ steps.update.outputs.title }}
-          body: Automated `nix-update --flake ${{ matrix.package }}` run.
+          body-path: ${{ steps.update.outputs.body }}
+          draft: ${{ steps.update.outputs.failed == 'true' && 'always-true' || 'false' }}
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
 
       # Squash-merges once the required checks (lint, eval, build) pass
-      - if: steps.pr.outputs.pull-request-number
+      - if: steps.pr.outputs.pull-request-number && steps.update.outputs.failed == 'false'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           PR: ${{ steps.pr.outputs.pull-request-number }}
           TITLE: ${{ steps.update.outputs.title }}
-        run: gh pr merge "$PR" --auto --squash --subject "$TITLE (#$PR)"
+        run: |
+          # An earlier failed run may have left it a draft
+          if [[ $(gh pr view "$PR" --json isDraft --jq .isDraft) == true ]]; then
+            gh pr ready "$PR"
+          fi
+          gh pr merge "$PR" --auto --squash --subject "$TITLE (#$PR)"
+
+      # Keep the run red so failures show up in Actions too
+      - if: steps.update.outputs.failed == 'true'
+        run: |
+          echo "::error::nix-update failed for $PKG; opened a draft PR"
+          exit 1
