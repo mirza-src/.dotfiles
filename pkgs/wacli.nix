@@ -6,16 +6,16 @@
 }:
 buildGo127Module (finalAttrs: {
   pname = "wacli";
-  version = "0.19.0";
+  version = "0.26.0";
 
   src = fetchFromGitHub {
     owner = "openclaw";
     repo = "wacli";
     tag = "v${finalAttrs.version}";
-    hash = "sha256-DXLKNujdE24hfIK+bkhDyBlmyGSineO3D73hILJhizc=";
+    hash = "sha256-CVjttZfkV1kIHxZTmWSJL3h4Zt/+c7A11LIJBrQu8kc=";
   };
 
-  vendorHash = "sha256-gqX3Db8bmJVzos/vGR0ekS0520HvabFb2IYJmq1TMNI=";
+  vendorHash = "sha256-PsKqI3zzNw5e38DSfa/qjorfjFsTxTRzNcw/EH4L9rk=";
 
   subPackages = [ "cmd/wacli" ];
 
