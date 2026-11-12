@@ -60,7 +60,7 @@ let
     gobject-introspection
   ];
 
-  # Pins from omdrop-owl v0.1.0's ./pins file.
+  # Pins from omdrop-owl v0.4.3's ./pins file.
   owl = fetchFromGitHub {
     owner = "jedbillyb";
     repo = "owl";
@@ -89,13 +89,13 @@ let
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "omdrop-owl";
-  version = "0.1.0";
+  version = "0.4.3";
 
   src = fetchFromGitHub {
     owner = "t4t5";
     repo = "omdrop-owl";
     rev = "v${finalAttrs.version}";
-    hash = "sha256-CNm3u2lIpQt9klvXO/nZy799LvplNeiJz5iCFWz0eDY=";
+    hash = "sha256-LtNUgXddvMXQTlRKUhbD4iyhNfeZ06LOt6TSdkdkk5k=";
   };
 
   nativeBuildInputs = [
