@@ -13,6 +13,23 @@ runs:
           accept-flake-config = true
           http-connections = 50
 
+    # accept-flake-config only applies to commands given a flake reference
+    # (.#foo); commands given store paths (nix build /nix/store/...drv^*, as
+    # cachix-sync does) would only see cache.nixos.org. Set the flake's
+    # caches for every nix command instead. (The runner is a trusted user, so
+    # the daemon accepts them.)
+    - shell: bash
+      run: |
+        nix eval --json --file flake.nix nixConfig | jq -r '
+          to_entries[] | "\(.key) = \(.value | if type == "array" then join(" ") else tostring end)"
+        ' > "$RUNNER_TEMP/nix-config"
+        cat "$RUNNER_TEMP/nix-config"
+        {
+          echo "NIX_CONFIG<<EOF"
+          cat "$RUNNER_TEMP/nix-config"
+          echo "EOF"
+        } >> "$GITHUB_ENV"
+
     # ~/.cache/nix holds the fetched flake inputs (tarball-cache) and the
     # binary caches' answers, so a run with the same flake.lock fetches no
     # inputs and repeats fewer lookups. Keyed by flake.lock alone, without
