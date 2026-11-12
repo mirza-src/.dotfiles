@@ -121,7 +121,7 @@ rec {
         system:
         import nixpkgs {
           inherit system;
-          config.allowUnfree = true;
+          config.allowUnfreePredicate = self.lib.allowUnfreePredicate;
         }
       );
 
@@ -169,7 +169,7 @@ rec {
                   inputs.giantswarm.overlay
                 ];
                 config = {
-                  allowUnfree = true;
+                  inherit (self.lib) allowUnfreePredicate;
                   permittedInsecurePackages = [ "electron-39.8.10" ];
                 };
               };

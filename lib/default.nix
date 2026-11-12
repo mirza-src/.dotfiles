@@ -1,5 +1,15 @@
 { lib, ... }:
 rec {
+  # Allows every unfree package, like `allowUnfree = true` (which must stay
+  # unset, or nixpkgs never calls this). With TRACE_UNFREE=1 (needs --impure)
+  # it also names each one on stderr, so the cache job in
+  # .github/workflows/check.yml can keep them out of the public binary cache.
+  allowUnfreePredicate =
+    if builtins.getEnv "TRACE_UNFREE" == "1" then
+      pkg: builtins.trace "unfree: ${pkg.name or "${pkg.pname}-${pkg.version}"}" true
+    else
+      _: true;
+
   # Flatten nested package sets into one level of derivations, joining the
   # names with "-": { a = drv; b.c = drv; } -> { a = drv; b-c = drv; }
   flattenPackages =

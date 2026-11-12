@@ -51,7 +51,7 @@ in
 
     # Apply overlays to the system's pkgs.
     nixpkgs.overlays = lib.attrValues self.overlays;
-    nixpkgs.config.allowUnfree = lib.mkDefault true;
+    nixpkgs.config.allowUnfreePredicate = lib.mkDefault self.lib.allowUnfreePredicate;
 
     # Git commit of this repo, shown by nixos-version / darwin-version.
     system.configurationRevision = self.rev or self.dirtyRev or null;
