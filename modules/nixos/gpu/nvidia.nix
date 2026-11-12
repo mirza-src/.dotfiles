@@ -30,7 +30,7 @@ in
       enable = true;
       settings = {
         battery_auto_switch = true;
-        battery_auto_switch_mode = "ultimate";
+        battery_auto_switch_mode = "hybrid";
         experimental_nvidia_block = true;
         external_display_auto_switch = true;
       };
