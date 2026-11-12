@@ -1,0 +1,183 @@
+# Build what this platform's hosts and homes (specialisations included) need
+# that no binary cache has, and push it to the mirza Cachix cache, leaving out
+# unfree packages: the cache is public, and they aren't ours to redistribute.
+# The cache job in .github/workflows/check.yml runs this too.
+# Pushing needs `cachix authtoken <token>` once, or CACHIX_AUTH_TOKEN.
+
+usage() {
+  cat <<EOF
+Usage: cachix-sync [--no-build] [--flake DIR]
+
+Build what this platform's hosts and homes need that no binary cache has,
+and push it to the mirza Cachix cache, leaving out unfree packages.
+
+  --no-build   only push what is already built
+  --flake DIR  the dotfiles checkout (default: ~/.dotfiles)
+EOF
+}
+
+cache=mirza
+build=true
+flake=$HOME/.dotfiles
+while (($#)); do
+  case $1 in
+    --no-build) build=false ;;
+    --flake)
+      flake=$2
+      shift
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+cd "$flake"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+group() { if [[ -n $GITHUB_ACTIONS ]]; then echo "::group::$1"; else echo "== $1"; fi; }
+endgroup() { if [[ -n $GITHUB_ACTIONS ]]; then echo "::endgroup::"; fi; }
+# `nix ... --json` keyed by full store path (older Nix: arrays of {path, ...};
+# newer: keys without the store dir)
+normalize='
+  if type == "array" then map({key: .path, value: .}) | from_entries else . end
+  | with_entries(select(.value != null)
+      | .key |= if startswith("/") then . else "/nix/store/" + . end)'
+
+system=$(nix eval --raw --impure --expr builtins.currentSystem)
+case $system in
+  *-linux) hosts=nixosConfigurations toplevel=config.system.build.toplevel ;;
+  *-darwin) hosts=darwinConfigurations toplevel=system ;;
+  *) echo "unsupported system $system" >&2; exit 1 ;;
+esac
+names() { nix eval --json ".#$1" --apply builtins.attrNames | jq -r '.[]'; }
+targets=()
+for host in $(names "$hosts"); do
+  targets+=(".#$hosts.$host.$toplevel")
+done
+for user in $(names "legacyPackages.$system.homeConfigurations"); do
+  targets+=(".#legacyPackages.$system.homeConfigurations.$user.activationPackage")
+done
+
+# Evaluate once, for the derivations and, with TRACE_UNFREE (see
+# lib.allowUnfreePredicate), the names of the unfree packages among them.
+if ! drvs=($(TRACE_UNFREE=1 nix path-info --impure --derivation "${targets[@]}" 2>"$tmp/eval")); then
+  cat "$tmp/eval" >&2
+  exit 1
+fi
+sed -n 's/^trace: unfree: //p' "$tmp/eval" | sort -u > "$tmp/unfree"
+group "Unfree packages (never pushed)"; cat "$tmp/unfree"; endgroup
+
+# Private sources (fetchFromGitHub { private = true; }, e.g. opsctl's: their
+# .drv names the NIX_GITHUB_PRIVATE_* credentials they fetch with) and every
+# derivation built from them: CI can't fetch them, and what's built from them
+# must not land in a public cache.
+nix-store --query --requisites "${drvs[@]}" | grep '\.drv$' \
+  | xargs grep -l NIX_GITHUB_PRIVATE > "$tmp/private-src" || true
+if [[ -s $tmp/private-src ]]; then
+  nix-store --query --referrers-closure $(<"$tmp/private-src") > "$tmp/private"
+else
+  : > "$tmp/private"
+fi
+group "Private sources (never built here, never pushed)"; cat "$tmp/private-src"; endgroup
+
+status=0
+if $build; then
+  # Derivations no substituter has
+  if ! out=$(nix build --dry-run "${drvs[@]/%/^*}" 2>&1); then
+    echo "$out" >&2
+    exit 1
+  fi
+  missing=$(awk '/will be built:$/ { b = 1; next } /^[^ ]/ { b = 0 } b { print $1 }' <<<"$out")
+
+  # Leave out:
+  # - unfree packages
+  # - private sources and what's built from them
+  # - downloads (fixed-output): nothing to gain over fetching upstream
+  # - those meant to be built locally (allowSubstitutes = false or
+  #   preferLocalBuild: config files, symlink farms like system-path and
+  #   home-manager-path, the generations): cheap, and building them would
+  #   download (or build) the whole closure
+  todo=()
+  if [[ -n $missing ]]; then
+    todo=($(nix derivation show $missing | jq -r --rawfile unfree "$tmp/unfree" --rawfile private "$tmp/private" '
+      def set: split("\n") | map({(.): true}) | add // {};
+      # A derivation attribute: in structuredAttrs (or the older env.__json)
+      # for derivations using structured attrs, else in env as a string
+      # (true: "1", false: "")
+      def attr($n):
+        if .structuredAttrs then .structuredAttrs[$n]
+        elif .env.__json then (.env.__json | fromjson)[$n]
+        else .env[$n] end;
+      def local:
+        (attr("allowSubstitutes") | . == false or . == "")
+        or (attr("preferLocalBuild") | . == true or . == "1");
+      ($unfree | set) as $unfree | ($private | set) as $private
+      | (.derivations // .) | to_entries[]
+      | .key |= (if startswith("/") then . else "/nix/store/" + . end)
+      | select((.value | local | not)
+          and all(.value.outputs[]; .hash == null)
+          and ($unfree[.value.name] | not)
+          and ($private[.key] | not))
+      | .key'))
+  fi
+  if (( ${#todo[@]} == 0 )); then
+    echo "Nothing to build"
+  else
+    group "Building ${#todo[@]} derivations"; printf '%s\n' "${todo[@]}"; endgroup
+    # Push what did build even if something failed
+    nix build --keep-going --no-link "${todo[@]/%/^*}" || status=$?
+  fi
+fi
+
+if [[ -z $CACHIX_AUTH_TOKEN && ! -e ${XDG_CONFIG_HOME:-$HOME/.config}/cachix/cachix.dhall ]]; then
+  echo "No Cachix token (CACHIX_AUTH_TOKEN or \`cachix authtoken\`), not pushing"
+  exit $status
+fi
+
+# Everything the targets' build closures hold that is in the store
+nix-store --query --requisites --include-outputs "${drvs[@]}" | grep -v '\.drv$' \
+  | nix path-info --json --stdin | jq "$normalize" > "$tmp/paths.json"
+
+# Paths never to push: unfree ones, by name (outputs other than out add a
+# suffix: -bin, -lib, ...; [44:] drops "/nix/store/<hash>-"), and those built
+# from private sources, by deriver. Cachix pushes a path's whole closure, so
+# everything referring to them stays out too.
+excluded=$(jq -r --rawfile u "$tmp/unfree" --rawfile p "$tmp/private" '
+  ($u | split("\n") | map(select(. != ""))) as $u
+  | ($p | split("\n") | map({(.): true}) | add // {}) as $p
+  | to_entries[]
+  | select((.key[44:] as $n | any($u[]; $n == . or ($n | startswith(. + "-"))))
+      or (.value.deriver // ""
+          | if . == "" or startswith("/") then . else "/nix/store/" + . end
+          | $p[.]))
+  | .key
+' "$tmp/paths.json")
+if [[ -n $excluded ]]; then
+  nix-store --query --referrers-closure $excluded > "$tmp/exclude"
+else
+  : > "$tmp/exclude"
+fi
+
+# Built here (ultimate: not downloaded), not a download or a copied source (ca)
+jq -r --rawfile ex "$tmp/exclude" '
+  ($ex | split("\n") | map({(.): true}) | add // {}) as $ex
+  | to_entries[]
+  | select(.value.ultimate == true and .value.ca == null)
+  | .key | select($ex[.] | not)
+' "$tmp/paths.json" > "$tmp/push"
+
+if [[ ! -s $tmp/push ]]; then
+  echo "Nothing to push"
+  exit $status
+fi
+group "Pushing $(wc -l < "$tmp/push" | tr -d ' ') paths to $cache"; cat "$tmp/push"; endgroup
+cachix push "$cache" < "$tmp/push"
+exit $status

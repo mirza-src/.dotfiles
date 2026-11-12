@@ -72,109 +72,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: ubuntu-latest, system: x86_64-linux, hosts: nixosConfigurations, toplevel: config.system.build.toplevel }
-          - { os: macos-latest, system: aarch64-darwin, hosts: darwinConfigurations, toplevel: system }
+          - { os: ubuntu-latest, system: x86_64-linux }
+          - { os: macos-latest, system: aarch64-darwin }
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-nix
-
-      - name: Build
-        shell: bash
-        env:
-          SYSTEM: ${{ matrix.system }}
-          HOSTS: ${{ matrix.hosts }}
-          TOPLEVEL: ${{ matrix.toplevel }}
-        run: |
-          names() { nix eval --json ".#$1" --apply builtins.attrNames | jq -r '.[]'; }
-          targets=()
-          for host in $(names "$HOSTS"); do
-            targets+=(".#$HOSTS.$host.$TOPLEVEL")
-          done
-          for user in $(names "legacyPackages.$SYSTEM.homeConfigurations"); do
-            targets+=(".#legacyPackages.$SYSTEM.homeConfigurations.$user.activationPackage")
-          done
-
-          # Derivations no substituter has. TRACE_UNFREE makes every unfree
-          # package print its name (lib.allowUnfreePredicate).
-          if ! out=$(TRACE_UNFREE=1 nix build --impure --dry-run "${targets[@]}" 2>&1); then
-            echo "$out"
-            exit 1
-          fi
-          sed -n 's/^trace: unfree: //p' <<<"$out" | sort -u > "$RUNNER_TEMP/unfree"
-          echo "::group::Unfree packages (not cached)"; cat "$RUNNER_TEMP/unfree"; echo "::endgroup::"
-          drvs=$(awk '/will be built:$/ { b = 1; next } /^[^ ]/ { b = 0 } b { print $1 }' <<<"$out")
-          if [[ -z $drvs ]]; then
-            echo "Everything is already cached"
-            exit 0
-          fi
-
-          # Leave out:
-          # - unfree packages: not ours to redistribute
-          # - downloads (fixed-output): nothing to gain over fetching upstream
-          # - those never substituted anyway (allowSubstitutes = false: config
-          #   files, symlink farms like system-path): cheap to build locally,
-          #   and building them here would download the whole closure
-          build=($(nix derivation show $drvs | jq -r --rawfile unfree "$RUNNER_TEMP/unfree" '
-            ($unfree | split("\n") | map({(.): true}) | add // {}) as $unfree
-            | (.derivations // .) | to_entries[]
-            | select(.value.env.allowSubstitutes != ""
-                and all(.value.outputs[]; .hash == null)
-                and ($unfree[.value.name] | not))
-            | .key | if startswith("/") then . else "/nix/store/" + . end'))
-          if (( ${#build[@]} == 0 )); then
-            echo "Nothing worth caching"
-            exit 0
-          fi
-          printf 'Building:\n'; printf '  %s\n' "${build[@]}"
-          nix build --keep-going --no-link "${build[@]/%/^*}"
-
-      # Push what this job built (eval-time IFD included), except unfree
-      # packages and everything that refers to them: Cachix pushes a path's
-      # whole closure.
-      - name: Push
-        if: ${{ !cancelled() }}
-        shell: bash
+      # Builds what no binary cache has and pushes it, leaving out unfree
+      # packages; also pushes what built when something else failed.
+      - name: Build and push
         env:
           CACHIX_AUTH_TOKEN: ${{ secrets.CACHIX_AUTH_TOKEN }}
-        run: |
-          if [[ -z $CACHIX_AUTH_TOKEN ]]; then
-            echo "No CACHIX_AUTH_TOKEN, not pushing"
-            exit 0
-          fi
-          touch "$RUNNER_TEMP/unfree"
-          # Keyed by full store path (older Nix: an array of {path, ...})
-          nix path-info --json --all | jq '
-            if type == "array" then map({key: .path, value: .}) | from_entries else . end
-            | with_entries(.key |= if startswith("/") then . else "/nix/store/" + . end)
-            | with_entries(select(.value != null))' > "$RUNNER_TEMP/paths.json"
-
-          # Unfree store paths by name; outputs other than out add a suffix
-          # (-bin, -lib, ...). [44:] drops "/nix/store/<hash>-".
-          unfree=$(jq -r --rawfile u "$RUNNER_TEMP/unfree" '
-            ($u | split("\n") | map(select(. != ""))) as $u
-            | keys[] | select(.[44:] as $n | any($u[]; $n == . or ($n | startswith(. + "-"))))
-          ' "$RUNNER_TEMP/paths.json")
-          if [[ -n $unfree ]]; then
-            nix-store --query --referrers-closure $unfree > "$RUNNER_TEMP/exclude"
-          else
-            : > "$RUNNER_TEMP/exclude"
-          fi
-
-          # Built here (ultimate: not downloaded), not a download or a copied
-          # source (ca), not a .drv
-          jq -r --rawfile ex "$RUNNER_TEMP/exclude" '
-            ($ex | split("\n") | map({(.): true}) | add // {}) as $ex
-            | to_entries[]
-            | select(.value.ultimate == true and .value.ca == null)
-            | .key | select((endswith(".drv") | not) and ($ex[.] | not))
-          ' "$RUNNER_TEMP/paths.json" > "$RUNNER_TEMP/push"
-
-          if [[ ! -s $RUNNER_TEMP/push ]]; then
-            echo "Nothing to push"
-            exit 0
-          fi
-          echo "::group::Pushing $(wc -l < "$RUNNER_TEMP/push" | tr -d ' ') paths"; cat "$RUNNER_TEMP/push"; echo "::endgroup::"
-          nix shell --inputs-from . nixpkgs#cachix --command cachix push mirza < "$RUNNER_TEMP/push"
+        run: nix run .#cachix-sync -- --flake .
 
   # Build the local packages whose derivation the PR (or push) changes, on
   # each platform: the updated package on a package PR, everything on a

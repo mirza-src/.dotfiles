@@ -189,6 +189,7 @@
 
     # Utilities
     cachix
+    cachix-sync # pushes what this machine built to the mirza cache
     bleachbit
     czkawka-full
     moodle-dl
