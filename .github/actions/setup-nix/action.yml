@@ -1,0 +1,24 @@
+name: Set up Nix
+description: >
+  Install Nix with the binary caches from flake.nix's nixConfig, and restore
+  the flake inputs and binary cache lookups of an earlier run.
+runs:
+  using: composite
+  steps:
+    - uses: cachix/install-nix-action@v31
+      with:
+        # Use the substituters in flake.nix's nixConfig (this repo's Cachix
+        # cache included), as the machines do
+        extra_nix_config: |
+          accept-flake-config = true
+          http-connections = 50
+
+    # ~/.cache/nix holds the fetched flake inputs (tarball-cache) and the
+    # binary caches' answers, so a run with the same flake.lock fetches no
+    # inputs and repeats fewer lookups. Keyed by flake.lock alone, without
+    # restore-keys, so it doesn't grow with every lock bump; unused caches
+    # expire after a week. PRs can restore main's cache.
+    - uses: actions/cache@v6
+      with:
+        path: ~/.cache/nix
+        key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}

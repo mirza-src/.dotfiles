@@ -30,7 +30,7 @@ jobs:
       packages: ${{ steps.discover.outputs.packages }}
     steps:
       - uses: actions/checkout@v7
-      - uses: cachix/install-nix-action@v31
+      - uses: ./.github/actions/setup-nix
       - id: discover
         env:
           FILTER: ${{ inputs.packages }}
@@ -51,7 +51,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 8
       matrix:
         package: ${{ fromJSON(needs.discover.outputs.packages) }}
     env:
@@ -60,10 +60,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: cachix/install-nix-action@v31
-        with:
-          # nix-update evaluates <nixpkgs> to run a passthru.updateScript
-          nix_path: nixpkgs=channel:nixos-unstable
+      - uses: ./.github/actions/setup-nix
+      # nix-update evaluates <nixpkgs> to run a passthru.updateScript: use the
+      # flake's, already fetched, instead of downloading a channel
+      - run: echo "NIX_PATH=nixpkgs=$(nix eval --raw --inputs-from . nixpkgs#path)" >> "$GITHUB_ENV"
 
       # Updating the PR resets its branch, so leave alone a PR with fixes pushed
       # by hand (non-merge commits not from the bot); it's yours to finish.
@@ -89,7 +89,7 @@ jobs:
           if [[ $(nix eval ".#packages.x86_64-linux.$PKG" --apply 'p: p ? updateScript') == true ]]; then
             args+=(--use-update-script)
           fi
-          if nix run nixpkgs#nix-update -- --flake "${args[@]}" "$PKG" 2>&1 | tee "$log"; then
+          if nix run --inputs-from . nixpkgs#nix-update -- --flake "${args[@]}" "$PKG" 2>&1 | tee "$log"; then
             failed=false
           else
             failed=true
