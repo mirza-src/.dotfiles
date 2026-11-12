@@ -188,6 +188,7 @@
     # devenv shells: `nix flake init -t ~/.dotfiles` for a new project.
 
     # Utilities
+    cachix
     bleachbit
     czkawka-full
     moodle-dl
