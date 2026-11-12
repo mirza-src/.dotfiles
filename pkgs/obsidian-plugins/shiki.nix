@@ -5,7 +5,7 @@
 }:
 stdenv.mkDerivation (finalAttrs: {
   pname = "obsidian-shiki-plugin";
-  version = "0.7.0";
+  version = "0.8.0";
   phases = [
     "installPhase"
     "fixupPhase"
@@ -13,7 +13,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   src = fetchzip {
     url = "https://github.com/mProjectsCode/${finalAttrs.pname}/releases/download/${finalAttrs.version}/shiki-highlighter-${finalAttrs.version}.zip";
-    hash = "sha256-qefQc5mHE9YmQZ+M+PldO1Jub9l8hhR9cYepoMr00rs=";
+    hash = "sha256-s8qBMMGeA9cwlY4DNoGmoGIY6M6YZgnoa2Mwin458Q0=";
   };
 
   installPhase = ''
