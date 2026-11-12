@@ -2,11 +2,21 @@
 rec {
   # Allows every unfree package, like `allowUnfree = true` (which must stay
   # unset, or nixpkgs never calls this). With TRACE_UNFREE=1 (needs --impure)
-  # it also names each one on stderr, so the cache job in
-  # .github/workflows/check.yml can keep them out of the public binary cache.
+  # it also names, on stderr, each one whose license forbids redistributing
+  # it, so cachix-sync can keep them out of the public binary cache.
+  # Redistributable ones (unfreeRedistributable: NVIDIA's driver, Steam, ...)
+  # may be cached.
   allowUnfreePredicate =
     if builtins.getEnv "TRACE_UNFREE" == "1" then
-      pkg: builtins.trace "unfree: ${pkg.name or "${pkg.pname}-${pkg.version}"}" true
+      pkg:
+      let
+        licenses = lib.toList (pkg.meta.license or [ ]);
+        redistributable = licenses != [ ] && lib.all (l: l.redistributable or false) licenses;
+      in
+      if redistributable then
+        true
+      else
+        builtins.trace "unfree: ${pkg.name or "${pkg.pname}-${pkg.version}"}" true
     else
       _: true;
 
