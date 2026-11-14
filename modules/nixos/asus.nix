@@ -39,7 +39,12 @@ in
         mt7925-regd-fix # AirDrop (AWDL) broken by 7.3's self-managed regd
       ];
       # + our kernel modules from pkgs-kernel/ (see overlay.nix)
-      boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-lto-zen4.extend pkgs.kernelModules;
+      #
+      # Not the -lto variant for now: nix-cachyos-kernel builds LTO kernels
+      # without BTF until nixpkgs has pahole >= 1.33 (its commit 3084b743b4),
+      # and cardwired's eBPF needs /sys/kernel/btf/vmlinux. Switch back to
+      # linuxPackages-cachyos-latest-lto-zen4 once that lands.
+      boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-zen4.extend pkgs.kernelModules;
 
       services.asusd.enable = true;
     })

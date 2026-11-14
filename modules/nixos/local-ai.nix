@@ -77,10 +77,6 @@ in
         assertion = cfg.gpuAcceleration != "cuda" || config.modules.gpu.nvidia.enable;
         message = "modules.local-ai.gpuAcceleration = \"cuda\" needs modules.gpu.nvidia.enable.";
       }
-      {
-        assertion = cfg.gpuAcceleration != "rocm" || config.modules.gpu.amd.enable;
-        message = "modules.local-ai.gpuAcceleration = \"rocm\" needs modules.gpu.amd.enable.";
-      }
     ];
 
     # Drivers come from the GPU modules (modules.gpu.*); this only runs the

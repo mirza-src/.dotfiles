@@ -22,7 +22,45 @@
   boot.kernelParams = [
     "kvm.enable_virt_at_load=0"
     "nvme_core.default_ps_max_latency_us=0"
+    # The kernel refuses to hibernate while any process holds memfd_secret
+    # memory, and Bitwarden desktop always does. Off = it falls back to
+    # ordinary locked memory.
+    "secretmem.enable=0"
+    # LZ4 instead of the default LZO for the hibernation image: quicker to
+    # read back on resume.
+    "hibernate.compressor=lz4"
   ];
+
+  # Swap file for hibernation (32 GB RAM). NixOS creates it on activation,
+  # with CoW disabled as btrfs requires. No resume=/resume_offset= needed:
+  # systemd stores the location in the HibernateLocation EFI variable and the
+  # systemd initrd resumes from it.
+  swapDevices = [
+    {
+      device = "/swap/swapfile";
+      size = 40 * 1024; # MiB
+    }
+  ];
+
+  # Power off the ordinary way after writing the hibernation image instead
+  # of through the firmware's S4 path, which intermittently leaves this
+  # laptop switched on (image written, keyboard backlight lit). Needs
+  # patches/nvidia-open-hibernate-shutdown-deadlock.patch, or the NVIDIA
+  # driver hangs this path every time.
+  systemd.sleep.settings.Sleep.HibernateMode = "shutdown";
+  # Lid close and the suspend key use suspend-then-hibernate
+  # (modules/nixos/defaults.nix): hibernate after this long asleep.
+  systemd.sleep.settings.Sleep.HibernateDelaySec = "1h";
+
+  # Keep amdgpu out of the initrd (nixos-hardware's common-gpu-amd puts it
+  # there). With it in stage 1, resuming from hibernation hangs or comes back
+  # with a dead iGPU: 2 of 3 resumes on 7.3.1 ("ring mes_kiq_3.1.0 test failed
+  # (-110)") and 2 of 4 on 7.3.4; every resume without it has worked. The
+  # boot kernel would otherwise initialise the iGPU and have to quiesce it
+  # again before handing over to the hibernated kernel. The splash does not
+  # need it: Plymouth draws on the firmware framebuffer (silent-boot.nix).
+  hardware.amdgpu.initrd.enable = false;
+
   services.printing.enable = true;
   services.fwupd.enable = true;
   networking.wireguard.enable = true;
@@ -53,7 +91,6 @@
   modules.audio.enable = true;
   modules.bluetooth.enable = true;
   modules.asus.enable = true;
-  modules.gpu.amd.enable = true;
   modules.gpu.nvidia.enable = true;
   modules.gpu.nvidia-prime.enable = true;
   modules.gpu.nvidia-prime.amdBusId = "PCI:101:0:0";

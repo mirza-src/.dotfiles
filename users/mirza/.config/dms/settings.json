@@ -3,6 +3,7 @@
     "mango"
   ],
   "configVersion": 43,
+  "lockBeforeSuspend": true,
   "batteryChargeLimit": 80,
   "batteryLowThreshold": 30,
   "batteryNotifyLow": true,

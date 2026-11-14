@@ -92,6 +92,12 @@ in
               # TODO: report to NVIDIA/open-gpu-kernel-modules; drop the patch
               #   once a driver release fixes it.
               ++ [ ../../../patches/nvidia-open-rtd3-probe-sysfs.patch ]
+              # Since 580.105 the PCI shutdown callback tears the DRM device down,
+              # which waits forever on the NVKMS PM lock still held from the
+              # "hibernate" request: hibernate writes its image, then never
+              # powers off. Skip the teardown while suspended for system sleep.
+              # TODO: report to NVIDIA/open-gpu-kernel-modules.
+              ++ [ ../../../patches/nvidia-open-hibernate-shutdown-deadlock.patch ]
               ++ optional config.modules.gpu.dynamic-mux.enable ../../../patches/nvidia-open-dynamic-mux.patch;
           });
         };

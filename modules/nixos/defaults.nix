@@ -23,8 +23,10 @@ in
 
     services.logind.settings.Login = {
       HandlePowerKey = "hibernate";
-      HandleSuspendKey = "suspend";
-      HandleLidSwitch = "suspend";
+      # Sleep first, hibernate after systemd.sleep HibernateDelaySec; falls back
+      # to plain suspend where hibernation is not available.
+      HandleSuspendKey = "suspend-then-hibernate";
+      HandleLidSwitch = "suspend-then-hibernate";
       HandleLidSwitchDocked = "ignore";
       HandleLidSwitchExternalPower = "ignore";
     };

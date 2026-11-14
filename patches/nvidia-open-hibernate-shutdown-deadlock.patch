@@ -1,0 +1,81 @@
+diff --git a/kernel-open/common/inc/nv-proto.h b/kernel-open/common/inc/nv-proto.h
+index f5fc883..8e02406 100644
+--- a/kernel-open/common/inc/nv-proto.h
++++ b/kernel-open/common/inc/nv-proto.h
+@@ -77,6 +77,7 @@ int         nvidia_dev_unblock_gc6      (const NvU8 *, nvidia_stack_t *);
+ 
+ #if defined(CONFIG_PM)
+ NV_STATUS     nv_set_system_power_state (nv_power_state_t, nv_pm_action_depth_t);
++NvBool        nv_is_system_pm_suspended (void);
+ #endif
+ 
+ void          nvidia_modeset_suspend           (NvU32 gpuId);
+diff --git a/kernel-open/nvidia/nv-pci.c b/kernel-open/nvidia/nv-pci.c
+index 48d8b78..db40cee 100644
+--- a/kernel-open/nvidia/nv-pci.c
++++ b/kernel-open/nvidia/nv-pci.c
+@@ -2982,12 +2982,40 @@ nv_pci_shutdown(struct pci_dev *pci_dev)
+     nv_pci_tegra_unregister_devfreq(pci_dev);
+ #endif
+ 
+-    nv_pci_remove_helper(pci_dev, false);
+-
+-    if (pci_get_drvdata(pci_dev) != NULL)
++#if defined(CONFIG_PM)
++    /*
++     * Power-off or reboot at the end of hibernation: the image is written,
++     * but the driver is still in the state its "hibernate" request left it
++     * in, because the matching "resume" only comes once the image has been
++     * restored. RM has already shut the GPU down and NVKMS's PM lock is
++     * still held for write, so tearing the device down here would wait for
++     * that lock forever:
++     *
++     *   nv_pci_remove_helper() -> nvidia_modeset_remove() -> nv_drm_remove()
++     *   -> nv_drm_dev_unload() -> nvkms_ioctl_from_kapi()
++     *   -> nvkms_read_lock_pm_lock()
++     *
++     * Leave the suspended device alone, as this callback did before the
++     * teardown was added to it.
++     */
++    if (nv_is_system_pm_suspended() ||
++        ((nvl->nv_state.flags & NV_FLAG_SUSPENDED) != 0))
+     {
++        nv_printf(NV_DBG_ERRORS,
++                  "NVRM: shutdown while suspended for system sleep, "
++                  "skipping GPU teardown\n");
+         nvl->nv_state.is_shutdown = NV_TRUE;
+     }
++    else
++#endif
++    {
++        nv_pci_remove_helper(pci_dev, false);
++
++        if (pci_get_drvdata(pci_dev) != NULL)
++        {
++            nvl->nv_state.is_shutdown = NV_TRUE;
++        }
++    }
+ 
+     /* pci_clear_master is not defined for !CONFIG_PCI */
+ #ifdef CONFIG_PCI
+diff --git a/kernel-open/nvidia/nv.c b/kernel-open/nvidia/nv.c
+index df5a5e0..51b5010 100644
+--- a/kernel-open/nvidia/nv.c
++++ b/kernel-open/nvidia/nv.c
+@@ -5173,6 +5173,16 @@ done:
+     return status;
+ }
+ 
++/*
++ * True from a successful "suspend"/"hibernate" request (PM notifier or
++ * /proc/driver/nvidia/suspend) until the matching "resume". For all of that
++ * time nv_system_pm_lock and NVKMS's PM lock are held for write.
++ */
++NvBool nv_is_system_pm_suspended(void)
++{
++    return READ_ONCE(nv_system_power_state) != NV_POWER_STATE_RUNNING;
++}
++
+ int nv_pmops_suspend(
+     struct device *dev
+ )
