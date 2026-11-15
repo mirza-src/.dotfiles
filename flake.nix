@@ -127,6 +127,23 @@ rec {
         }
       );
 
+      # One nixpkgs with all overlays and config, for home-manager, so modules
+      # don't set nixpkgs.* (which would make home-manager import it again).
+      userPkgsFor = forAllSystems (
+        system:
+        import nixpkgs {
+          inherit system;
+          overlays = lib.attrValues self.overlays ++ [
+            inputs.vscode-extensions.overlays.default
+            inputs.giantswarm.overlay
+          ];
+          config = {
+            inherit (self.lib) allowUnfreePredicate;
+            permittedInsecurePackages = [ "electron-39.8.10" ];
+          };
+        }
+      );
+
       # packagesFromDirectoryRecursive includes functions like callPackage
       # Local packages, nested as in the directory tree
       localPackagesFor = forAllSystems (
@@ -162,19 +179,7 @@ rec {
           homeConfigurations = lib.genAttrs (self.lib.listNixModules ./users) (
             username:
             home-manager.lib.homeManagerConfiguration {
-              # One nixpkgs with all overlays and config, so modules don't set
-              # nixpkgs.* (which would make home-manager import it again).
-              pkgs = import nixpkgs {
-                inherit system;
-                overlays = lib.attrValues self.overlays ++ [
-                  inputs.vscode-extensions.overlays.default
-                  inputs.giantswarm.overlay
-                ];
-                config = {
-                  inherit (self.lib) allowUnfreePredicate;
-                  permittedInsecurePackages = [ "electron-39.8.10" ];
-                };
-              };
+              pkgs = userPkgsFor.${system};
               extraSpecialArgs = {
                 inherit self inputs username;
               };
