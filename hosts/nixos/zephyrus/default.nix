@@ -101,6 +101,8 @@
   modules.onepassword.enable = true;
   modules.gaming.enable = true;
   modules.power.enable = true;
+  modules.tailscale.enable = true;
+  modules.tailscale.domain = "tailc4d4bc.ts.net"; # https://zephyrus.tailc4d4bc.ts.net
   modules.local-ai.enable = true;
 
   modules.silent-boot.enable = true;
