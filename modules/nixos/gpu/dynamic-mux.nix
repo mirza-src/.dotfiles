@@ -148,6 +148,13 @@ in
         ExecStop = "${pkgs.systemd}/bin/systemctl stop cardwired.service";
       };
     };
+    # cardwired holds a logind sleep delay inhibitor and moves the panel back
+    # to the iGPU before every suspend/hibernate (sleeping with the dGPU
+    # driving the panel hangs s2idle), then re-enters Ultimate after resume.
+    # A handover takes ~1-2 s but can hit its 5 s per-step timeouts; logind's
+    # default 5 s cap would cut it off mid-switch.
+    services.logind.settings.Login.InhibitDelayMaxSec = 15;
+
     # The mango flake module defaults to its own build; use the patched one.
     programs.mango.package = pkgs.mango;
     environment.sessionVariables.WLR_DRM_DYNAMIC_PRIMARY = "1";

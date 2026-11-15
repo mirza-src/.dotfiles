@@ -1368,7 +1368,7 @@ index 076aa76..a3d493e 100644
  pub use smart::SmartPolicyInterface;
  pub use switcheroo::SwitcherooInterface;
 diff --git a/crates/cardwire-daemon/src/interface/mode.rs b/crates/cardwire-daemon/src/interface/mode.rs
-index 9d38212..94ceabc 100644
+index 9d38212..3a48557 100644
 --- a/crates/cardwire-daemon/src/interface/mode.rs
 +++ b/crates/cardwire-daemon/src/interface/mode.rs
 @@ -1,7 +1,7 @@
@@ -1439,7 +1439,7 @@ index 9d38212..94ceabc 100644
 +    pub fn transition_in_progress(&self) -> bool {
 +        self.transition.try_lock().is_err()
 +    }
- 
++
 +    /// Automatic mode change (display/hotplug reconcile): only applied if the mode is still
 +    /// `expected` once the transition lock is held. A decision taken while another transition
 +    /// was running (e.g. hotplugs caused by the live panel switch itself, seen while the old
@@ -1462,7 +1462,7 @@ index 9d38212..94ceabc 100644
 +        self.emit_mux_changed().await;
 +        result
 +    }
-+
+ 
 +    /// Announce a newly applied blocking policy: per-GPU `Block` properties, the switcheroo API
 +    /// and nvidia-powerd.
 +    async fn notify_policy_applied(&self, mode: Modes) {
@@ -1478,7 +1478,7 @@ index 9d38212..94ceabc 100644
                  let lock = self.nvidia_powerd_lock.clone();
                  task::spawn(async move {
                      let _guard = lock.lock().await;
-@@ -115,10 +146,375 @@ impl ModeInterface {
+@@ -115,10 +146,409 @@ impl ModeInterface {
                  });
              }
          }
@@ -1851,10 +1851,44 @@ index 9d38212..94ceabc 100644
 +        }
 +    }
 +
++    /// Move the panel back to the iGPU before system sleep (suspend, hibernate,
++    /// suspend-then-hibernate). Sleeping with the dGPU driving the panel hangs s2idle, and the
++    /// firmware resets the mux to the iGPU on a hibernate resume anyway.
++    ///
++    /// A live Ultimate becomes Hybrid with Ultimate pending (the persisted mode is untouched),
++    /// exactly like a half-switched reconcile. Returns whether Ultimate was left, so the caller
++    /// can switch back after resume.
++    pub async fn leave_for_sleep(&self) -> bool {
++        let _transition = self.transition.lock().await;
++        if !self.mux.param_present() {
++            return false;
++        }
++        let mode = self.mode_state.read().await.mode();
++        let panel = self.mux.panel_gpu().await;
++        if mode != Modes::Ultimate && panel != PanelGpu::Dgpu {
++            return false;
++        }
++
++        info!("mux: going to sleep, moving the internal panel back to the iGPU");
++        let left_ultimate = mode == Modes::Ultimate;
++        let result = if left_ultimate {
++            let result = self.set_mode_locked(Modes::Hybrid, false).await;
++            self.mux.set_pending(true);
++            result
++        } else {
++            self.set_mode_locked(mode, false).await
++        };
++        if let Err(err) = result {
++            error!("mux: failed to move the panel back to the iGPU before sleep: {err}");
++        }
++        self.emit_mux_changed().await;
++        left_ultimate
++    }
++
      /// Apply a mode to GPU blocking and the eBPF map without persisting it
      pub(crate) async fn apply_mode(&self, mode: Modes) -> fdo::Result<()> {
          let gpu_list = self.gpu_list.read().await;
-@@ -153,7 +549,8 @@ impl ModeInterface {
+@@ -153,7 +583,8 @@ impl ModeInterface {
              }
  
              // Hybrid mode unblocks all GPUs so all are available to the system
@@ -1864,7 +1898,7 @@ index 9d38212..94ceabc 100644
                  for gpu in gpu_list.values().filter(|gpu| gpu.device.is_available()) {
                      gpu.unblock_gpu().await?;
                  }
-@@ -208,6 +605,7 @@ impl ModeInterface {
+@@ -208,6 +639,7 @@ impl ModeInterface {
      /// 1 -> Hybrid
      /// 2 -> Manual
      /// 3 -> Smart
@@ -1872,7 +1906,7 @@ index 9d38212..94ceabc 100644
      #[zbus(property)]
      pub async fn set_mode(&self, mode: u32) -> fdo::Result<()> {
          let mode = Modes::try_from(mode).map_err(|err| fdo::Error::InvalidArgs(err.to_string()))?;
-@@ -223,6 +621,7 @@ impl ModeInterface {
+@@ -223,6 +655,7 @@ impl ModeInterface {
      /// 1 -> Hybrid
      /// 2 -> Manual
      /// 3 -> Smart
@@ -1880,7 +1914,7 @@ index 9d38212..94ceabc 100644
      #[zbus(property)]
      pub async fn mode(&self) -> fdo::Result<u32> {
          Ok(u32::from(self.mode_state.read().await.mode()))
-@@ -230,19 +629,32 @@ impl ModeInterface {
+@@ -230,19 +663,32 @@ impl ModeInterface {
  
      // zbus method
      /// List of available modes depending of the system type
@@ -2058,12 +2092,12 @@ index bd45fc3..e6d7c58 100644
          async move {
 diff --git a/crates/cardwire-daemon/src/tasks/logind.rs b/crates/cardwire-daemon/src/tasks/logind.rs
 new file mode 100644
-index 0000000..c182dbd
+index 0000000..feb94b8
 --- /dev/null
 +++ b/crates/cardwire-daemon/src/tasks/logind.rs
-@@ -0,0 +1,90 @@
-+//! Listen to logind to hand the internal panel back to the iGPU before shutdown and to
-+//! reconcile the live display mux after resume
+@@ -0,0 +1,107 @@
++//! Listen to logind to hand the internal panel back to the iGPU before shutdown and sleep, and
++//! to reconcile the live display mux (and re-enter Ultimate) after resume
 +
 +use std::time::Duration;
 +
@@ -2091,11 +2125,12 @@ index 0000000..c182dbd
 +    fn prepare_for_sleep(&self, start: bool) -> Result<()>;
 +}
 +
-+/// Take a shutdown delay inhibitor so logind waits for the panel handover
-+async fn shutdown_inhibitor(proxy: &Login1ManagerProxy<'_>) -> Option<OwnedFd> {
++/// Take a delay inhibitor (`what` = "shutdown" or "sleep") so logind waits for the panel
++/// handover
++async fn delay_inhibitor(proxy: &Login1ManagerProxy<'_>, what: &str) -> Option<OwnedFd> {
 +    match proxy
 +        .inhibit(
-+            "shutdown",
++            what,
 +            "cardwire",
 +            "Move the internal panel back to the iGPU",
 +            "delay",
@@ -2104,7 +2139,7 @@ index 0000000..c182dbd
 +    {
 +        Ok(fd) => Some(fd),
 +        Err(err) => {
-+            warn!("failed to take a logind shutdown inhibitor: {err}");
++            warn!("failed to take a logind {what} inhibitor: {err}");
 +            None
 +        }
 +    }
@@ -2115,7 +2150,10 @@ index 0000000..c182dbd
 +    let proxy = Login1ManagerProxy::new(&connection).await?;
 +    let mut shutdown_stream = proxy.receive_prepare_for_shutdown().await?;
 +    let mut sleep_stream = proxy.receive_prepare_for_sleep().await?;
-+    let mut inhibitor = shutdown_inhibitor(&proxy).await;
++    let mut inhibitor = delay_inhibitor(&proxy, "shutdown").await;
++    let mut sleep_inhibitor = delay_inhibitor(&proxy, "sleep").await;
++    // Ultimate was left for sleep and is switched back after resume
++    let mut restore_ultimate = false;
 +
 +    loop {
 +        tokio::select! {
@@ -2133,17 +2171,30 @@ index 0000000..c182dbd
 +                        warn!("failed to reconcile the mux after a cancelled shutdown: {err}");
 +                    }
 +                    if inhibitor.is_none() {
-+                        inhibitor = shutdown_inhibitor(&proxy).await;
++                        inhibitor = delay_inhibitor(&proxy, "shutdown").await;
 +                    }
 +                }
 +            }
 +            Some(signal) = sleep_stream.next() => {
 +                let Ok(args) = signal.args() else { continue };
-+                if !args.start {
++                if args.start {
++                    restore_ultimate |= mode_interface.leave_for_sleep().await;
++                    // Release the delay lock so the sleep proceeds
++                    drop(sleep_inhibitor.take());
++                } else {
 +                    info!("resumed from sleep, reconciling the live display mux");
 +                    tokio::time::sleep(RESUME_SETTLE).await;
 +                    if let Err(err) = mode_interface.reconcile_mux().await {
 +                        warn!("failed to reconcile the mux after resume: {err}");
++                    }
++                    if std::mem::take(&mut restore_ultimate) {
++                        info!("mux: switching the internal panel back to the dGPU after resume");
++                        if let Err(err) = mode_interface.apply_pending().await {
++                            warn!("failed to re-enter Ultimate after resume (still pending): {err}");
++                        }
++                    }
++                    if sleep_inhibitor.is_none() {
++                        sleep_inhibitor = delay_inhibitor(&proxy, "sleep").await;
 +                    }
 +                }
 +            }
@@ -2373,10 +2424,10 @@ index 7a958ba..2738822 100644
          write!(f, "{}", s)
      }
 diff --git a/docs/getting-started/usage.md b/docs/getting-started/usage.md
-index 0dbddf9..afb03f2 100644
+index 0dbddf9..8439dc9 100644
 --- a/docs/getting-started/usage.md
 +++ b/docs/getting-started/usage.md
-@@ -64,6 +64,50 @@ To have cardwire allow access to all GPUs, use
+@@ -64,6 +64,52 @@ To have cardwire allow access to all GPUs, use
  cardwire set hybrid
  ```
  
@@ -2421,13 +2472,15 @@ index 0dbddf9..afb03f2 100644
 +cardwire mux reconcile  # re-read the mux and reconcile it with the current mode (done automatically after resume)
 +```
 +
-+Before shutdown the panel is moved back to the iGPU (logind delay inhibitor). After resume the mux
-+state is reconciled: if the panel came back on the iGPU, Ultimate becomes pending again.
++Before shutdown and before sleep (suspend, hibernate, suspend-then-hibernate) the panel is moved
++back to the iGPU (logind delay inhibitors); for sleep Ultimate becomes pending. After resume the mux
++state is reconciled and an Ultimate left for sleep is switched back to the dGPU. If the panel came
++back on the iGPU for any other reason, Ultimate becomes pending again.
 +
  ### Smart Mode
  
  Smart mode blocks the dedicated GPU by default like integrated mode, but uses a real-time analyzer to scan each application at launch and selectively allow GPU access for approved apps.
-@@ -187,7 +231,7 @@ To enable/disable it:
+@@ -187,7 +233,7 @@ To enable/disable it:
  cardwire config battery-auto-switch true
  ```
  
