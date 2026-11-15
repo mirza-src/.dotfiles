@@ -44,9 +44,88 @@ rec {
   listNixModules =
     dir:
     lib.pipe (builtins.readDir dir) [
-      (lib.filterAttrs (name: type: !lib.hasPrefix "." name && (type == "directory" || lib.hasSuffix ".nix" name)))
+      (lib.filterAttrs (
+        name: type: !lib.hasPrefix "." name && (type == "directory" || lib.hasSuffix ".nix" name)
+      ))
       (lib.mapAttrsToList (name: _: lib.removeSuffix ".nix" name))
     ];
+
+  # Toolsets: sets of tools switched on from anywhere with `tools`
+  # (modules/home-manager/toolsets). Each ../toolsets/<name>.nix (or
+  # <name>/default.nix) is `{ pkgs, lib }: { description; packages; env; }`;
+  # env values are written in double quotes, so $HOME etc. expand.
+  toolsetNames = if builtins.pathExists ../toolsets then listNixModules ../toolsets else [ ];
+
+  loadToolsets =
+    pkgs:
+    lib.genAttrs toolsetNames (
+      name:
+      let
+        file = ../toolsets + "/${name}.nix";
+        def = import (if builtins.pathExists file then file else ../toolsets + "/${name}") {
+          inherit pkgs lib;
+        };
+        unknown = lib.attrNames (
+          removeAttrs def [
+            "description"
+            "packages"
+            "env"
+          ]
+        );
+      in
+      lib.throwIf (unknown != [ ]) "toolsets/${name}: unknown attributes ${toString unknown}" (
+        {
+          description = "";
+          packages = [ ];
+          env = { };
+        }
+        // def
+      )
+    );
+
+  toolsetInfo = pkgs: lib.mapAttrs (_: t: t.description) (loadToolsets pkgs);
+
+  # A buildEnv for every combination of toolsets, named by its members
+  # sorted and joined with "+" ("none" for the empty one). Only the one asked
+  # for is evaluated. Besides the packages it holds etc/tools/{names,vars,env.sh}
+  # for the `tools` command and the shell hook.
+  mkToolsets =
+    pkgs:
+    let
+      defs = loadToolsets pkgs;
+      build =
+        names:
+        let
+          key = if names == [ ] then "none" else lib.concatStringsSep "+" names;
+          env = lib.foldl' (
+            acc: name:
+            lib.foldlAttrs (
+              vars: var: value:
+              let
+                v = toString value;
+              in
+              lib.throwIf (
+                vars ? ${var} && vars.${var} != v
+              ) "toolsets ${key}: ${name} sets ${var} differently than another toolset" (vars // { ${var} = v; })
+            ) acc defs.${name}.env
+          ) { } names;
+        in
+        lib.nameValuePair key (
+          pkgs.buildEnv {
+            name = "toolset-${key}";
+            paths = lib.concatMap (name: defs.${name}.packages) names ++ [
+              (pkgs.writeTextDir "etc/tools/names" (lib.concatLines names))
+              (pkgs.writeTextDir "etc/tools/vars" (lib.concatLines (lib.attrNames env)))
+              (pkgs.writeTextDir "etc/tools/env.sh" (
+                lib.concatLines (lib.mapAttrsToList (var: v: ''export ${var}="${v}"'') env)
+              ))
+            ];
+          }
+        );
+      # All subsets, each in the (sorted) order of toolsetNames.
+      subsets = lib.foldr (x: acc: acc ++ map (s: [ x ] ++ s) acc) [ [ ] ] toolsetNames;
+    in
+    lib.listToAttrs (map build subsets);
 
   createModuleEntryPoint =
     dir:
@@ -67,13 +146,12 @@ rec {
 
       modules = fileModules // dirModules;
     in
-    modules // {
+    modules
+    // {
       default =
         { ... }:
         {
-          imports =
-            lib.attrValues fileModules
-            ++ lib.mapAttrsToList (_: ns: ns.default) dirModules;
+          imports = lib.attrValues fileModules ++ lib.mapAttrsToList (_: ns: ns.default) dirModules;
         };
     };
 }

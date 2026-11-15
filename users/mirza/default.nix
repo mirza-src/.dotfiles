@@ -24,6 +24,7 @@
 
   programs.home-manager.enable = true;
   programs.claude-code.enable = true;
+  programs.toolsets.enable = true; # `tools use <toolset>...` (./toolsets)
   programs.zsh.enable = true;
   programs.git = {
     enable = true;

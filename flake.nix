@@ -127,8 +127,9 @@ rec {
         }
       );
 
-      # One nixpkgs with all overlays and config, for home-manager, so modules
-      # don't set nixpkgs.* (which would make home-manager import it again).
+      # One nixpkgs with all overlays and config, for home-manager (so modules
+      # don't set nixpkgs.*, which would make home-manager import it again)
+      # and the toolsets.
       userPkgsFor = forAllSystems (
         system:
         import nixpkgs {
@@ -174,6 +175,11 @@ rec {
         system:
         localPackagesFor.${system}
         // {
+          # Toolsets (./toolsets), switched on from anywhere with `tools`:
+          # toolsets."<a>+<b>" is the combination of a and b.
+          toolsets = self.lib.mkToolsets userPkgsFor.${system};
+          toolsetInfo = self.lib.toolsetInfo userPkgsFor.${system};
+
           # Standalone home-manager configuration entrypoint
           # Available through 'home-manager switch --flake .#username'
           homeConfigurations = lib.genAttrs (self.lib.listNixModules ./users) (
