@@ -25,6 +25,9 @@
   programs.home-manager.enable = true;
   programs.claude-code.enable = true;
   programs.toolsets.enable = true; # `tools use <toolset>...` (./toolsets)
+  # `profile claude local|cloud`, opencode, Matt Pocock's skills
+  # (modules/home-manager/local-ai).
+  modules.local-ai-client.enable = true;
   programs.zsh.enable = true;
   programs.git = {
     enable = true;

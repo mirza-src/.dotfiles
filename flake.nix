@@ -70,6 +70,13 @@ rec {
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # Matt Pocock's agent skills (grill-me, to-spec, to-tickets, implement,
+    # ...) for Claude Code and OpenCode (modules/home-manager/local-ai).
+    mattpocock-skills = {
+      url = "github:mattpocock/skills";
+      flake = false;
+    };
+
     # ComfyUI-GGUF: loads GGUF image/video models in ComfyUI (macOS can't
     # run the fp8 ones; modules/common/local-ai.nix).
     comfyui-gguf = {
