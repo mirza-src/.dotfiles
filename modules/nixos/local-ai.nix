@@ -1,3 +1,9 @@
+# NixOS half of modules.local-ai (catalog, llama-swap config and routes in
+# ../common/local-ai.nix): llama-swap with a GPU build of llama.cpp and
+# PyTorch (ComfyUI), the llama-models service that downloads the models
+# ahead of time, and Open WebUI.
+#
+# ComfyUI's models and custom nodes: /var/lib/llama-swap/comfyui.
 {
   config,
   lib,
@@ -7,21 +13,31 @@
 
 let
   inherit (lib)
-    elem
-    head
-    mkEnableOption
     mkIf
     mkOption
     types
     ;
   cfg = config.modules.local-ai;
+
+  # nixpkgs built with CUDA, the configuration cache.nixos-cuda.org builds:
+  # its llama.cpp and PyTorch come prebuilt from there instead of from a
+  # local multi-hour build.
+  pkgsCuda = import pkgs.path {
+    inherit (pkgs.stdenv.hostPlatform) system;
+    config = config.nixpkgs.config // {
+      cudaSupport = true;
+    };
+  };
+
+  llamaCppFor = {
+    cuda = pkgsCuda.llama-cpp;
+    rocm = pkgs.llama-cpp.override { rocmSupport = true; };
+    vulkan = pkgs.llama-cpp.override { vulkanSupport = true; };
+    cpu = pkgs.llama-cpp;
+  };
 in
 {
   options.modules.local-ai = {
-    enable = mkEnableOption "Local AI stack featuring Ollama, Open WebUI, and OpenCode";
-
-    autostart = mkEnableOption "starting the local AI stack automatically at boot";
-
     gpuAcceleration = mkOption {
       type = types.enum [
         "cuda"
@@ -30,117 +46,84 @@ in
         "cpu"
       ];
       default = "cuda";
-      description = "Hardware acceleration engine to use for inference pipelines.";
-    };
-
-    webuiPort = mkOption {
-      type = types.port;
-      default = 8080;
-      description = "The port network bind for the Open WebUI panel dashboard.";
-    };
-
-    models = mkOption {
-      type = types.listOf types.str;
-      default = [
-        "qwen2.5:0.5b"
-        # Dense
-        "qwen3.5:9b"
-        "hf.co/unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL"
-        # MoE (larger than VRAM, Ollama splits them across GPU and CPU)
-        "hf.co/unsloth/gemma-4-26B-A4B-it-qat-GGUF:UD-Q4_K_XL"
-        "hf.co/unsloth/qwen3.6-35B-A3B-GGUF:UD-IQ4_XS"
-        # Needs llama.cpp's llama-diffusion-cli; Ollama's llama-server can't run it yet.
-        # "hf.co/unsloth/diffusiongemma-26B-A4B-it-GGUF:Q4_K_M"
-      ];
-      description = "List of model parameters for Ollama to fetch on system rebuild activation.";
-    };
-
-    taskModel = mkOption {
-      type = types.nullOr types.str;
-      default = null;
-      description = "Model from `models` Open WebUI uses for titles, tags and follow-ups. Defaults to the first model.";
+      description = "llama.cpp backend.";
     };
   };
 
-  config = mkIf cfg.enable {
-
-    assertions = [
+  config = mkIf cfg.enable (
+    lib.mkMerge [
       {
-        assertion = cfg.models != [ ];
-        message = "modules.local-ai.models must contain at least one model.";
-      }
-      {
-        assertion = cfg.taskModel == null || elem cfg.taskModel cfg.models;
-        message = "modules.local-ai.taskModel must be one of modules.local-ai.models.";
-      }
-      {
-        assertion = cfg.gpuAcceleration != "cuda" || config.modules.gpu.nvidia.enable;
-        message = "modules.local-ai.gpuAcceleration = \"cuda\" needs modules.gpu.nvidia.enable.";
-      }
-    ];
+        assertions = [
+          {
+            assertion = cfg.gpuAcceleration != "cuda" || config.modules.gpu.nvidia.enable;
+            message = "modules.local-ai.gpuAcceleration = \"cuda\" needs modules.gpu.nvidia.enable.";
+          }
+        ];
 
-    # Drivers come from the GPU modules (modules.gpu.*); this only runs the
-    # inference stack on top of them.
-    services.ollama = {
-      enable = true;
-      package = pkgs.${"ollama-${cfg.gpuAcceleration}"};
-      loadModels = cfg.models;
-      environmentVariables = {
-        # Default 4096 truncates longer chats (prompts were hitting 4095 tokens).
-        OLLAMA_CONTEXT_LENGTH = "16384";
-        # Keep the chat and task models loaded side by side, and let one model
-        # serve two requests at once so background tasks don't block the chat.
-        OLLAMA_MAX_LOADED_MODELS = "2";
-        OLLAMA_NUM_PARALLEL = "2";
-      };
-    };
-    systemd.services.ollama.wantedBy = lib.mkForce [ ];
-    systemd.services.ollama.partOf = [ "local-ai.target" ];
-    systemd.services.ollama-model-loader.wantedBy = lib.mkForce [ "ollama.service" ];
-
-    services.open-webui = {
-      enable = true;
-      port = cfg.webuiPort;
-      environment = {
-        OLLAMA_API_BASE_URL = "http://127.0.0.1:11434";
-        WEBUI_AUTH = "False";
-        TASK_MODEL = if cfg.taskModel != null then cfg.taskModel else head cfg.models;
-      };
-    };
-    systemd.services.open-webui.wantedBy = lib.mkForce [ ];
-    systemd.services.open-webui.bindsTo = [ "ollama.service" ];
-    systemd.services.open-webui.partOf = [ "local-ai.target" ];
-
-    systemd.targets.local-ai = {
-      description = "Local AI stack";
-      wants = [
-        "ollama.service"
-        "open-webui.service"
-      ];
-      after = [
-        "ollama.service"
-        "open-webui.service"
-      ];
-      wantedBy = mkIf cfg.autostart [ "multi-user.target" ];
-    };
-
-    environment.systemPackages = with pkgs; [
-      git
-      lmstudio
-      opencode
-    ];
-
-    environment.etc."opencode/opencode.json".text = builtins.toJSON {
-      "$schema" = "https://opencode.ai/config.json";
-      provider = {
-        ollama = {
-          npm = "@ai-sdk/openai-compatible";
-          name = "Ollama (local)";
-          options = {
-            baseURL = "http://localhost:11434/v1";
+        modules.local-ai = {
+          llamaCpp = llamaCppFor.${cfg.gpuAcceleration};
+          modelDir = lib.mkDefault "/var/cache/llama-swap/models";
+          comfyui = {
+            package = lib.mkDefault (if cfg.gpuAcceleration == "cuda" then pkgsCuda.comfyui else pkgs.comfyui);
+            dataDir = lib.mkDefault "/var/lib/llama-swap/comfyui";
           };
         };
-      };
-    };
-  };
+
+        # Idle llama-swap holds no model, so it can always run.
+        services.llama-swap = {
+          enable = true;
+          listenAddress = "127.0.0.1"; # reached through the reverse proxy
+          inherit (cfg) port settings;
+        };
+
+        # The /llm router (see ../common/local-ai.nix).
+        services.litellm = {
+          enable = true;
+          host = "127.0.0.1";
+          inherit (cfg.router) port settings;
+        };
+
+        # Downloads the catalog's models at boot and after a rebuild that
+        # changed it (only what's missing or updated), retrying while offline.
+        # Same dynamic user and cache directory as llama-swap, which reads them.
+        systemd.services.llama-models = {
+          description = "Download the llama-swap models";
+          wantedBy = [ "multi-user.target" ];
+          wants = [ "network-online.target" ];
+          after = [ "network-online.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true; # so a changed catalog re-runs it on switch
+            ExecStart = cfg.pullCommand;
+            Restart = "on-failure";
+            RestartSec = "10min";
+            DynamicUser = true;
+            User = "llama-swap";
+            CacheDirectory = "llama-swap";
+            Nice = 19;
+            IOSchedulingClass = "idle";
+          };
+        };
+      }
+
+      (mkIf cfg.webui.enable {
+        services.open-webui = {
+          enable = true;
+          host = "127.0.0.1";
+          inherit (cfg.webui) port environment;
+        };
+      })
+
+      (mkIf cfg.imageGen.enable {
+        systemd.services.llama-swap = {
+          environment.HOME = "/var/lib/llama-swap";
+          serviceConfig = {
+            StateDirectory = "llama-swap"; # ComfyUI's dataDir
+            # PyTorch generates code at run time.
+            MemoryDenyWriteExecute = lib.mkForce false;
+          };
+        };
+      })
+    ]
+  );
 }

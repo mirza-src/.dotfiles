@@ -32,6 +32,16 @@
   modules.onepassword.enable = true;
   modules.tailscale.enable = true;
   modules.tailscale.domain = "tailc4d4bc.ts.net"; # https://macbook-pro.tailc4d4bc.ts.net
+  # http://macbook-pro/ (Open WebUI), /llm (local models on whichever
+  # machine is free), /comfyui/; see modules/common/local-ai.nix.
+  modules.local-ai = {
+    enable = true;
+    imageGen.enable = true;
+    machines = [
+      "zephyrus"
+      "macbook-pro"
+    ];
+  };
 
   modules.hs-fulda-vpn = {
     enable = true;

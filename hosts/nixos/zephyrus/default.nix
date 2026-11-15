@@ -103,7 +103,16 @@
   modules.power.enable = true;
   modules.tailscale.enable = true;
   modules.tailscale.domain = "tailc4d4bc.ts.net"; # https://zephyrus.tailc4d4bc.ts.net
-  modules.local-ai.enable = true;
+  # http://zephyrus/ (Open WebUI), /llm (local models on whichever machine is
+  # free), /comfyui/; see modules/common/local-ai.nix.
+  modules.local-ai = {
+    enable = true;
+    imageGen.enable = true;
+    machines = [
+      "zephyrus"
+      "macbook-pro"
+    ];
+  };
 
   modules.silent-boot.enable = true;
   # modules.secure-boot.enable = true;

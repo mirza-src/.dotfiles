@@ -70,6 +70,13 @@ rec {
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
+    # ComfyUI-GGUF: loads GGUF image/video models in ComfyUI (macOS can't
+    # run the fp8 ones; modules/common/local-ai.nix).
+    comfyui-gguf = {
+      url = "github:city96/ComfyUI-GGUF";
+      flake = false;
+    };
+
     # HACK: To allow pure evaluation
     devenv-root = {
       url = "file+file:///dev/null";

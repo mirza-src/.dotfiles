@@ -27,6 +27,22 @@
         "type": "github"
       }
     },
+    "comfyui-gguf": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1768222528,
+        "narHash": "sha256-/ZwecgxTTMo9J1whdEJci8lEkOy/yP+UmjbpOAA3BvU=",
+        "owner": "city96",
+        "repo": "ComfyUI-GGUF",
+        "rev": "6ea2651e7df66d7585f6ffee804b20e92fb38b8a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "city96",
+        "repo": "ComfyUI-GGUF",
+        "type": "github"
+      }
+    },
     "crane": {
       "locked": {
         "lastModified": 1789760033,
@@ -666,6 +682,7 @@
     "root": {
       "inputs": {
         "cachyos-kernel": "cachyos-kernel",
+        "comfyui-gguf": "comfyui-gguf",
         "dank-greeter": "dank-greeter",
         "dank-material-shell": "dank-material-shell",
         "danksearch": "danksearch",

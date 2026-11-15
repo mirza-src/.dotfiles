@@ -135,7 +135,7 @@ in
         gitmojiLauncher.enable = true;
         quickCapture.enable = true; # screenshots, recordings, OCR, QR scan
         dankKDEConnect.enable = true; # Phone Connect (programs.kdeconnect below)
-        aiOverviewControl.enable = true; # Claude limits + local Ollama models
+        aiOverviewControl.enable = true; # Claude limits
         dmsThemeSync.enable = true; # apply DMS theme to GTK/Qt/KDE/fontconfig
         bitwarden = {
           enable = true; # Bitwarden Dankbar (bitwarden-cli)
