@@ -56,7 +56,7 @@ in
     modules.kubernetes.enable = true;
     modules.kubernetes.helmPlugins = [ pkgs.kubernetes-helmPlugins.helm-schema ];
 
-    programs.ssh-agent-switch.agents."1password" =
+    programs.profile-switch.switches.ssh.options."1password" =
       if pkgs.stdenv.hostPlatform.isDarwin then
         "${config.home.homeDirectory}/Library/Group Containers/2BUA8C4S2C.com.1password/t/agent.sock"
       else

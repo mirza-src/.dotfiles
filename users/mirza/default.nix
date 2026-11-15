@@ -38,17 +38,26 @@
     };
   };
 
-  programs.ssh-agent-switch = {
+  # SSH agent: one stable socket (~/.ssh/agent.sock) for every shell and GUI
+  # app, linked to the chosen agent with `profile ssh <agent>`;
+  # `profile ssh <agent> -- ssh host` uses another agent for one command.
+  programs.profile-switch = {
     enable = true;
-    defaultAgent = "bitwarden";
-    agents.bitwarden = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
-    # Plain OpenSSH agent (systemd on Linux, launchd on macOS). Expanded at
-    # runtime: the socket lives in a per-user temp dir.
-    agents.local =
-      if pkgs.stdenv.hostPlatform.isDarwin then
-        "$(${lib.getExe pkgs.getconf} DARWIN_USER_TEMP_DIR)/${config.services.ssh-agent.socket}"
-      else
-        "$XDG_RUNTIME_DIR/${config.services.ssh-agent.socket}";
+    switches.ssh = {
+      link = "${config.home.homeDirectory}/.ssh/agent.sock";
+      default = "bitwarden";
+      env = "SSH_AUTH_SOCK";
+      kind = "socket";
+      session = true;
+      options.bitwarden = "${config.home.homeDirectory}/.bitwarden-ssh-agent.sock";
+      # Plain OpenSSH agent (systemd on Linux, launchd on macOS). Expanded at
+      # runtime: the socket lives in a per-user temp dir.
+      options.local =
+        if pkgs.stdenv.hostPlatform.isDarwin then
+          "$(${lib.getExe pkgs.getconf} DARWIN_USER_TEMP_DIR)/${config.services.ssh-agent.socket}"
+        else
+          "$XDG_RUNTIME_DIR/${config.services.ssh-agent.socket}";
+    };
   };
   services.ssh-agent.enable = true;
 
