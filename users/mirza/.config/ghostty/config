@@ -49,3 +49,7 @@ gtk-single-instance = true
 
 # Dank color generation
 theme = dankcolors
+
+# Per-OS overrides, only written on macOS (users/mirza/darwin.nix); `?` keeps
+# Linux quiet where the file doesn't exist.
+config-file = ?macos.conf
