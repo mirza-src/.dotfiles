@@ -47,6 +47,15 @@ in
       boot.kernelPackages = pkgs.cachyosKernels.linuxPackages-cachyos-latest-zen4.extend pkgs.kernelModules;
 
       services.asusd.enable = true;
+
+      # Let the input group set Fn-lock without sudo (fn_lock comes from
+      # hid-asus-fnlock and exists once the driver has bound).
+      services.udev.extraRules = ''
+        ACTION=="bind", SUBSYSTEM=="hid", DRIVER=="asus", TEST=="fn_lock", RUN+="${pkgs.coreutils}/bin/chgrp input /sys%p/fn_lock", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys%p/fn_lock"
+      '';
+
+      # fnlock [on|off|toggle|status|reapply], for shortcuts and the DMS plugin.
+      environment.systemPackages = [ pkgs.fnlock ];
     })
   ];
 }
