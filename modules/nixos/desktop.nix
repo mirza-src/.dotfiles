@@ -151,7 +151,20 @@ in
           enable = true;
           src = lib.mkForce pkgs.dms-plugins.dankChat; # Nix Python env + wacli, no runtime setup
         };
-        dmsAirDrop.enable = true; # omdrop + omdrop-owl from pkgs/
+        dmsAirDrop = {
+          enable = true; # omdrop + omdrop-owl from pkgs/
+          # The backend runs as a bare `python3` from the shell's PATH, and
+          # there is none outside devenv. Stdlib only; workers it spawns reuse
+          # sys.executable.
+          src = lib.mkForce (
+            dmsPlugins.dmsAirDrop.overrideAttrs (old: {
+              postPatch = (old.postPatch or "") + ''
+                substituteInPlace AirDropController.qml \
+                  --replace-fail '["python3", helper, command]' '["${lib.getExe pkgs.python3}", helper, command]'
+              '';
+            })
+          );
+        };
       };
     };
     systemd.user.services.dms.environment.GSETTINGS_SCHEMA_DIR = "${gsettingsSchemas}";
