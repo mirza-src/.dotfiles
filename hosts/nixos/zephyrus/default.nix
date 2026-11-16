@@ -61,6 +61,11 @@
   # need it: Plymouth draws on the firmware framebuffer (silent-boot.nix).
   hardware.amdgpu.initrd.enable = false;
 
+  # Debugging freezes after resume (dGPU falling off the bus, 2026-11-16).
+  # Report every task stuck for 2 min, not only the first 10, so a frozen
+  # compositor shows up next to the driver threads it waits on.
+  boot.kernel.sysctl."kernel.hung_task_warnings" = -1;
+
   services.printing.enable = true;
   services.fwupd.enable = true;
   networking.wireguard.enable = true;
