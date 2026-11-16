@@ -54,6 +54,22 @@ in
         ACTION=="bind", SUBSYSTEM=="hid", DRIVER=="asus", TEST=="fn_lock", RUN+="${pkgs.coreutils}/bin/chgrp input /sys%p/fn_lock", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys%p/fn_lock"
       '';
 
+      # After a Windows boot where G-Helper set Fn-lock, the state the driver
+      # applies at probe doesn't stick. Re-send the driver's state once the
+      # system is up so fnlock_default wins.
+      systemd.services.fnlock-reapply = {
+        description = "Re-apply keyboard Fn-lock state";
+        wantedBy = [ "multi-user.target" ];
+        after = [
+          "systemd-udev-settle.service"
+          "asusd.service"
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${lib.getExe pkgs.fnlock} reapply";
+        };
+      };
+
       # fnlock [on|off|toggle|status|reapply], for shortcuts and the DMS plugin.
       environment.systemPackages = [ pkgs.fnlock ];
     })
