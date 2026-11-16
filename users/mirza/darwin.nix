@@ -26,6 +26,32 @@ lib.mkIf pkgs.stdenv.hostPlatform.isDarwin {
         (./.config + "/Code - Insiders/User/settings.json");
   };
 
+  targets.darwin.defaults."com.apple.dock".persistent-apps =
+    map (app: "${config.home.homeDirectory}/Applications/Home Manager Apps/${app}.app")
+      [
+        "Firefox"
+        "Zed"
+        "kitty"
+        "Slack"
+      ];
+
+  # The Dock only rereads its settings on restart: restart it when the app
+  # list changed since the last switch.
+  home.activation.restartDock =
+    let
+      apps = builtins.hashString "sha256" (
+        builtins.toJSON config.targets.darwin.defaults."com.apple.dock".persistent-apps
+      );
+    in
+    lib.hm.dag.entryAfter [ "setDarwinDefaults" ] ''
+      dockStamp="${config.xdg.stateHome}/home-manager/dock-apps"
+      if [[ ! -v DRY_RUN ]] && [[ "$(cat "$dockStamp" 2>/dev/null)" != "${apps}" ]]; then
+        /usr/bin/killall Dock || true
+        mkdir -p "$(dirname "$dockStamp")"
+        echo "${apps}" > "$dockStamp"
+      fi
+    '';
+
   # Not available on macOS: veracrypt, protonplus, rocketchat-desktop,
   # Dolphin/Ark, i2c-tools, eduvpn-client.
 }
