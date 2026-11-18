@@ -124,6 +124,17 @@ in
 
     # Session switches: their variable names the link everywhere.
     home.sessionVariables = sessionVars;
+    # SSH agent modules (services.ssh-agent, ...) set SSH_AUTH_SOCK through
+    # sshAuthSock in .zshenv/.zprofile, bash's profile and a systemd unit,
+    # so non-interactive shells (AI agents, scripts) and the systemd/D-Bus
+    # environment would otherwise get the agent's own socket, not the link.
+    sshAuthSock.initialization = lib.mkIf (sessionVars ? SSH_AUTH_SOCK) (
+      lib.mkForce {
+        bash = posixExport "SSH_AUTH_SOCK" sessionVars.SSH_AUTH_SOCK;
+        fish = ''set -x SSH_AUTH_SOCK "${sessionVars.SSH_AUTH_SOCK}"'';
+        nushell = ''$env.SSH_AUTH_SOCK = "${sessionVars.SSH_AUTH_SOCK}"'';
+      }
+    );
     # ...and again last in each shell's init, over whatever set it in
     # between (services.ssh-agent sets SSH_AUTH_SOCK there, for example).
     programs.bash.initExtra = lib.mkIf (sessionVars != { }) (lib.mkOrder 2000 (exports posixExport));
