@@ -10,6 +10,21 @@ let
     mkIf
     ;
   cfg = config.modules.giantswarm;
+
+  # tsh loads its certs into $SSH_AUTH_SOCK by default, and the Bitwarden
+  # agent refuses ssh-add ("agent: failure"), which fails every tsh command.
+  # tsh reads the certs from ~/.tsh itself, so it doesn't need the agent.
+  # Set in a wrapper (not sessionVariables) so it applies without re-login;
+  # --set-default keeps a per-command override possible.
+  teleport' = pkgs.symlinkJoin {
+    name = "teleport-${pkgs.teleport.version}";
+    paths = [ pkgs.teleport ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/tsh --set-default TELEPORT_ADD_KEYS_TO_AGENT no
+    '';
+    inherit (pkgs.teleport) meta;
+  };
 in
 {
   options.modules.giantswarm = {
@@ -23,7 +38,7 @@ in
         go
         jq
         yq-go
-        teleport
+        teleport'
         github-cli
 
         tilt
