@@ -37,3 +37,13 @@ lib.pipe (builtins.readDir ./pkgs) [
 // {
   inherit kernelModules;
 }
+# pre-commit's test suite needs the source-built dotnet SDK on Darwin, which
+# drags in a from-source swift toolchain (swift-collections fails to link:
+# install_name_tool headerpad). The tests are the only consumer; skip them.
+// lib.optionalAttrs prev.stdenv.hostPlatform.isDarwin {
+  pre-commit = prev.pre-commit.overridePythonAttrs (old: {
+    doCheck = false;
+    dontUsePytestCheck = true; # the hook runs pytest regardless of doCheck
+    env = removeAttrs (old.env or { }) [ "DOTNET_ROOT" ];
+  });
+}
