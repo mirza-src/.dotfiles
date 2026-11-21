@@ -2,6 +2,7 @@
   lib,
   pkgs,
   config,
+  inputs,
   ...
 }:
 let
@@ -50,15 +51,25 @@ in
         kube-linter
         pre-commit
         helm-docs
-
-        # 1Password itself comes from the host (modules.onepassword).
-
-        # From nix-gs (its overlay is applied in flake.nix)
+      ]
+      # From nix-gs
+      ++ (with inputs.giantswarm.packages.${pkgs.stdenv.hostPlatform.system}; [
         architect
         devctl
         kubectl-gs
-        opsctl
-      ]
+        (
+          # opsctl depends on both github.com/Microsoft/go-winio and
+          # github.com/microsoft/kiota-*. With the default `go mod vendor`, darwin's
+          # case-insensitive APFS merges them into one directory, so the vendorHash
+          # differs from Linux. proxyVendor stores the module cache instead, which
+          # escapes capitals (`!microsoft/go-winio`), so one hash works on both.
+          # The hash is for opsctl 12.1.1; drop this once nix-gs uses proxyVendor.
+          opsctl.overrideAttrs {
+            proxyVendor = true;
+            vendorHash = "sha256-Fy0zpJRKyTM3YIg8Hv4eX0lxTnMZh5roVAzxkmrrVyM=";
+          }
+        )
+      ])
       ++ (with giantswarm; [
         helm-values-gen
         luigi

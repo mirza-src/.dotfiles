@@ -150,15 +150,6 @@ rec {
           inherit system;
           overlays = lib.attrValues self.overlays ++ [
             inputs.vscode-extensions.overlays.default
-            inputs.giantswarm.overlay
-            # Temporary: nix-gs's opsctl vendorHash was computed against its
-            # older nixpkgs; our newer Go produces a different go-modules hash.
-            # Remove once the hash is fixed in nix-gs and the input is updated.
-            (_: prev: {
-              opsctl = prev.opsctl.overrideAttrs {
-                vendorHash = "sha256-YVGV/bAMy3s71PsAZ3r+a6BzJGjbKBwMHmASxHp5OoA=";
-              };
-            })
           ];
           config = {
             inherit (self.lib) allowUnfreePredicate;
