@@ -2,7 +2,7 @@
   "dmsWindowsFloatingSeeded": [
     "mango"
   ],
-  "configVersion": 43,
+  "configVersion": 46,
   "lockBeforeSuspend": true,
   "batteryChargeLimit": 80,
   "batteryLowThreshold": 30,
