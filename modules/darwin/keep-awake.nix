@@ -59,10 +59,16 @@ in
       RunAtLoad = true;
     };
 
-    launchd.daemons.keep-awake-lid.serviceConfig = {
-      ProgramArguments = [ "${watch}" ];
-      RunAtLoad = true;
-      KeepAlive = true;
+    # `command` (not ProgramArguments) so nix-darwin wraps it in
+    # `wait4path /nix/store`: at boot launchd starts daemons before the nix
+    # volume mounts, and a missing executable fails with EX_CONFIG and is
+    # never retried.
+    launchd.daemons.keep-awake-lid = {
+      command = "${watch}";
+      serviceConfig = {
+        RunAtLoad = true;
+        KeepAlive = true;
+      };
     };
   };
 }
