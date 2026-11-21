@@ -4,6 +4,7 @@
   ],
   "configVersion": 46,
   "lockBeforeSuspend": true,
+  "keepAwakeBlocksSleep": true,
   "batteryChargeLimit": 80,
   "batteryLowThreshold": 30,
   "batteryNotifyLow": true,
@@ -41,6 +42,7 @@
       ],
       "rightWidgets": [
         "systemTray",
+        "idleInhibitor",
         "clipboard",
         "bitwarden",
         "developerUtilities",

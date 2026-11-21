@@ -28,6 +28,9 @@ let
       # Brightness follows the backlight of the lit panel (live display mux:
       # amdgpu_bl1 goes dark while the dGPU drives the panel via nvidia_0).
       patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-brightness-follow-mux.patch}
+      # Keep Awake with "stay awake with the lid closed" doesn't lock on lid
+      # close (upstream locks, since the blocked suspend would have).
+      patch -d $out/share/quickshell/dms -p1 < ${../../patches/dms-no-lock-on-lid-keep-awake.patch}
     '';
   });
   dmsPlugins = inputs.dms-plugin-registry.packages.${system};

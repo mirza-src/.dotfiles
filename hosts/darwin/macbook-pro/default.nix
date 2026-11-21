@@ -30,6 +30,7 @@
   modules.nix.enable = true;
   modules.fonts.enable = true;
   modules.onepassword.enable = true;
+  modules.keep-awake.enable = true;
   modules.tailscale.enable = true;
   modules.tailscale.domain = "tailc4d4bc.ts.net"; # https://macbook-pro.tailc4d4bc.ts.net
   # http://macbook-pro/ (Open WebUI), /llm (local models on whichever
