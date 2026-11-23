@@ -1,18 +1,18 @@
 diff --git a/kernel-open/nvidia/nv-pci.c b/kernel-open/nvidia/nv-pci.c
-index 48d8b78..fbffe70 100644
+index 5aee234..4178568 100644
 --- a/kernel-open/nvidia/nv-pci.c
 +++ b/kernel-open/nvidia/nv-pci.c
-@@ -42,6 +42,9 @@
- #include <linux/jiffies.h>
- #include <linux/kernel.h>
- #include <linux/workqueue.h>
+@@ -45,6 +45,9 @@
+ #include <linux/completion.h>
+ #include <linux/iommu.h>
+ #include <linux/kthread.h>
 +#include <linux/fs_struct.h>
 +#include <linux/pid.h>
 +#include <linux/sched/task.h>
  
- #if defined(NV_PM_QOS_READ_VALUE_SUPPORTED)
- #include <linux/pm_qos.h>
-@@ -422,6 +425,43 @@ static NvBool nv_treat_missing_irq_as_error(void)
+ #if defined(NV_SEQ_READ_ITER_PRESENT)
+ #include <linux/seq_file.h>
+@@ -464,6 +467,43 @@ static NvBool nv_treat_missing_irq_as_error(void)
  #endif
  }
  
@@ -56,7 +56,7 @@ index 48d8b78..fbffe70 100644
  static void nv_get_pci_sysfs_config
  (
      struct pci_dev *pci_dev,
-@@ -440,6 +480,19 @@ static void nv_get_pci_sysfs_config
+@@ -482,6 +522,19 @@ static void nv_get_pci_sysfs_config
      if (ret > 0 && ret < sizeof(filename))
      {
          struct file *file = filp_open(filename, O_RDONLY, 0);
